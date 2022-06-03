@@ -1,5 +1,5 @@
 [tool.poetry]
-name = "solinas"
+name = "roi"
 version = "0.1.0"
 description = ""
 authors = ["Mateus Canelhas <mateus.canelhas@gmail.com>"]

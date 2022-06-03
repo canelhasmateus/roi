@@ -1,13 +1,10 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import NewType, TypeAlias, Iterable, Generic, TypeVar, Protocol, Callable
-
-K = TypeVar( "K" )
-V = TypeVar( "V" )
-T = TypeVar( "T", covariant=True )
+from typing import NewType, TypeAlias, Iterable, Generic, TypeVar
 
 String: TypeAlias = str
+Binary: TypeAlias = bytes
 IsoTime = NewType( "IsoTime", str )
 
 #
@@ -17,28 +14,23 @@ UClean = NewType( "UClean", UrlStatus )
 S = TypeVar( "S", bound=UrlStatus )
 
 
-class Result( Protocol[ K ] ):
-
-	def map( self, fn: Callable[ [ K ], V ] ) -> Result[ V ]:
-		...
-
-	def flatMap( self, fn: Callable[ [ K ], Result[ V ] ] ) -> Result[ V ]:
-		...
-
-
 #
 
 @dataclass
 class Url( Generic[ S ] ):
 	raw: String
-
+	scheme: String | None
+	netloc: String | None
+	path: String | None
+	query: String | None
+	hostname: String | None
 
 
 
 @dataclass
 class PageInfo:
 	url: Url[ UClean ]
-
+	source: String | Binary
 
 
 ContentStatus = NewType( "ContentStatus", object )
@@ -60,4 +52,3 @@ class PageContent( Generic[ C ] ):
 	tags: Iterable[ String ] | None
 	comments: Iterable[ String ] | None
 	neighbors: Iterable[ Url[ URaw ] ]
-
