@@ -1,45 +1,44 @@
-import prefect
 from prefect import task, Flow, Task
 
-
-@task
-def read_data(x):
-
-	return [ x, 2 ] * 2
+from src.processing.web.domain import PageInfo, String
+from src.processing.web.logic import UrlParser, UrlFetcher, ContentParser
 
 
 @task
-def c(x):
-	print( x )
-	return x + 3
+def read_data( x ):
+	return [
+			"http://akira.ruc.dk/~keld/research/LKH/LKH-1.3/DOC/LKH_REPORT.pdf",
+			"https://hirrolot.github.io/posts/rust-is-hard-or-the-misery-of-mainstream-programming.html"
+	]
 
 
 @task
-def d(x):
-	print( sum( x ) )
+def fetchRaw( url: String ):
+	fetch = UrlFetcher()
+	parse = UrlParser()
+	return (parse( url )
+	        .flatMap( fetch )
+	        .unwrap())
 
 
-class BufferedTask( Task ):
-
-	def open(self):
-		...
-
-	...
+@task
+def persistRaw( info: PageInfo ):
+	print( "persistRaw" )
 
 
-def over(x):
-
-	@task
-	def ret(y):
-		return x.map( y )
-
-	return ret
+@task
+def parseContent( content: PageInfo ):
+	parser = ContentParser()
+	p = parser( content ).unwrap()
+	print( p )
+	return p
 
 
 with Flow( "Hello-Flow" ) as flow:
-	x = (a()
-	     .pipe( read_data ))
+	data = read_data( "" )
+	infos = fetchRaw.map( data )
 
-	d.map( x )
+	persistRaw.map( infos )
+	parseContent.map( infos )
 
 flow.run()

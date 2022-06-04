@@ -1,10 +1,13 @@
 from __future__ import annotations
 
 from dataclasses import dataclass , replace
-from typing import NewType, TypeAlias, Iterable, Generic, TypeVar, overload
+from typing import NewType, TypeAlias, Iterable, Generic, TypeVar, Mapping, List
 
 String: TypeAlias = str
 Binary: TypeAlias = bytes
+MimeType: NewType( "MimeType", str )
+TextEncoding: NewType( "TextEncoding", str )
+WebHeader: NewType( "WebHeader", Mapping[ String , String | List[ String ] ] )
 IsoTime = NewType( "IsoTime", str )
 
 #
@@ -26,10 +29,18 @@ class Url( Generic[ S ] ):
 	def update(self , kwargs ) -> Url[ S ]:
 		return replace( self , **kwargs )
 
+
+# noinspection PyUnresolvedReferences
 @dataclass
 class PageInfo:
-	url: Url[ UClean ]
-	source: String | Binary
+	url: Url[ ... ]
+	headers : WebHeader
+	content: String | Binary
+
+	mime : MimeType | None
+	encoding : TextEncoding | None
+
+
 
 #
 
@@ -39,7 +50,7 @@ CRich = NewType( "CRich", ContentStatus )
 C = TypeVar( "C", bound=ContentStatus )
 
 
-@dataclass
+@dataclass( )
 class PageContent( Generic[ C ] ):
 	...
 	text: String

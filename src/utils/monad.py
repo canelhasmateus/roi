@@ -6,6 +6,7 @@ K = TypeVar( "K" )
 V = TypeVar( "V" )
 
 class Result( Generic[ K ] ):
+	__slots__ = ( "value", "error" )
 
 	def __init__(self, value: K = None, error: Exception = None):
 		self.value = value
