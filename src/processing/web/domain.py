@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass , replace
 from typing import NewType, TypeAlias, Iterable, Generic, TypeVar
 
 String: TypeAlias = str
@@ -14,8 +14,6 @@ UClean = NewType( "UClean", UrlStatus )
 S = TypeVar( "S", bound=UrlStatus )
 
 
-#
-
 @dataclass
 class Url( Generic[ S ] ):
 	raw: String
@@ -25,13 +23,15 @@ class Url( Generic[ S ] ):
 	query: String | None
 	hostname: String | None
 
-
+	def update(self , kwargs ) -> Url[ S ]:
+		return replace( self , **kwargs )
 
 @dataclass
 class PageInfo:
 	url: Url[ UClean ]
 	source: String | Binary
 
+#
 
 ContentStatus = NewType( "ContentStatus", object )
 CRaw = NewType( "CRaw", ContentStatus )
