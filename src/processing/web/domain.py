@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass , replace
-from typing import NewType, TypeAlias, Iterable, Generic, TypeVar
+from typing import NewType, TypeAlias, Iterable, Generic, TypeVar, overload
 
 String: TypeAlias = str
 Binary: TypeAlias = bytes
