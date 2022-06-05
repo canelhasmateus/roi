@@ -1,20 +1,25 @@
 from __future__ import annotations
 
-from dataclasses import dataclass , replace
-from typing import NewType, TypeAlias, Iterable, Generic, TypeVar, Mapping, List
+from dataclasses import dataclass, replace
+from typing import NewType, TypeAlias, Iterable, Generic, TypeVar, Mapping, List, Protocol
+
+from requests import Response
+
+from src.utils.monad import Result
 
 String: TypeAlias = str
+TabSeparated: TypeAlias = str
 Binary: TypeAlias = bytes
 MimeType: NewType( "MimeType", str )
 TextEncoding: NewType( "TextEncoding", str )
-WebHeader: NewType( "WebHeader", Mapping[ String , String | List[ String ] ] )
+WebHeader: NewType( "WebHeader", Mapping[ String, String | List[ String ] ] )
 IsoTime = NewType( "IsoTime", str )
 
 #
 UrlStatus = NewType( "UrlStatus", object )
 URaw = NewType( "URaw", UrlStatus )
 UClean = NewType( "UClean", UrlStatus )
-S = TypeVar( "S", bound=UrlStatus )
+S = TypeVar( "S", bound = UrlStatus )
 
 
 @dataclass
@@ -26,20 +31,23 @@ class Url( Generic[ S ] ):
 	query: String | None
 	hostname: String | None
 
-	def update(self , kwargs ) -> Url[ S ]:
-		return replace( self , **kwargs )
+	def update( self, kwargs ) -> Url[ S ]:
+		return replace( self, **kwargs )
+
+	@property
+	def domain( self ):
+		raise NotImplemented
 
 
 # noinspection PyUnresolvedReferences
 @dataclass
-class PageInfo:
+class ResponseInfo:
 	url: Url[ ... ]
-	headers : WebHeader
+	headers: WebHeader
 	content: String | Binary
 
-	mime : MimeType | None
-	encoding : TextEncoding | None
-
+	mime: MimeType | None
+	encoding: TextEncoding | None
 
 
 #
@@ -47,11 +55,11 @@ class PageInfo:
 ContentStatus = NewType( "ContentStatus", object )
 CRaw = NewType( "CRaw", ContentStatus )
 CRich = NewType( "CRich", ContentStatus )
-C = TypeVar( "C", bound=ContentStatus )
+C = TypeVar( "C", bound = ContentStatus )
 
 
-@dataclass( )
-class PageContent( Generic[ C ] ):
+@dataclass
+class PageInfo( Generic[ C ] ):
 	...
 	text: String
 
@@ -63,3 +71,27 @@ class PageContent( Generic[ C ] ):
 	tags: Iterable[ String ] | None
 	comments: Iterable[ String ] | None
 	neighbors: Iterable[ Url[ URaw ] ]
+
+
+#
+
+class PageException( Exception ):
+	def __init__( self, url, status, message ):
+		self.url = url
+		self.status = status
+		self.message = message
+
+
+class UrlParser( Protocol[ S ] ):
+	def __call__( self, string: String ) -> Result[ Url[ S ] ]:
+		...
+
+
+class WebFetcher( Protocol ):
+	def __call__( self, url: Url[ ... ], headers: Mapping[ String, String ] ) -> Result[ ResponseInfo ]:
+		...
+
+
+class ContentParser( Protocol ):
+	def __call__( self, info: ResponseInfo ) -> Result[ PageInfo ]:
+		...

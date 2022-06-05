@@ -1,33 +1,35 @@
 from prefect import task, Flow, Task
 
-from src.processing.web.domain import PageInfo, String
-from src.processing.web.logic import UrlParser, UrlFetcher, ContentParser
+from src.persistence.filesystem import read_articles_tsv
+from src.processing.web.domain import ResponseInfo, String
+from src.processing.web.logic import UrlParser, WebFetcher, ContentParser, default_url_parser, default_fetcher, default_response_parser
 
 
 @task
-def read_data( x ):
-	return [
-			"http://akira.ruc.dk/~keld/research/LKH/LKH-1.3/DOC/LKH_REPORT.pdf",
-			"https://hirrolot.github.io/posts/rust-is-hard-or-the-misery-of-mainstream-programming.html"
-	]
+def read_data():
+	filepath = ""
+	return read_articles_tsv( filepath )
 
 
 @task
-def fetchRaw( url: String ):
-	fetch = UrlFetcher()
-	parse = UrlParser()
-	return (parse( url )
-	        .flatMap( fetch )
+def fetchRaw( url: String ) -> ResponseInfo:
+	parse_url = default_url_parser()
+	fetch_url = default_fetcher()
+	parse_response = default_response_parser()
+	return (parse_url( url )
+	        .flatMap( fetch_url )
+	        .flatMap( parse_response )
 	        .unwrap())
 
 
 @task
-def persistRaw( info: PageInfo ):
+def persistRaw( info: ResponseInfo ):
 	print( "persistRaw" )
 
 
 @task
-def parseContent( content: PageInfo ):
+def parseContent( content: ResponseInfo ):
+	default_response_parser()
 	parser = ContentParser()
 	p = parser( content ).unwrap()
 	print( p )
@@ -35,7 +37,7 @@ def parseContent( content: PageInfo ):
 
 
 with Flow( "Hello-Flow" ) as flow:
-	data = read_data( "" )
+	data = read_data()
 	infos = fetchRaw.map( data )
 
 	persistRaw.map( infos )
