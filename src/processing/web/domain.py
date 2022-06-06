@@ -3,8 +3,6 @@ from __future__ import annotations
 from dataclasses import dataclass, replace
 from typing import NewType, TypeAlias, Iterable, Generic, TypeVar, Mapping, List, Protocol
 
-from requests import Response
-
 from src.utils.monad import Result
 
 String: TypeAlias = str
@@ -22,7 +20,7 @@ UClean = NewType( "UClean", UrlStatus )
 S = TypeVar( "S", bound = UrlStatus )
 
 
-@dataclass
+@dataclass( frozen = True)
 class Url( Generic[ S ] ):
 	raw: String
 	scheme: String | None
@@ -60,7 +58,7 @@ C = TypeVar( "C", bound = ContentStatus )
 
 @dataclass
 class PageInfo( Generic[ C ] ):
-	...
+	url: Url
 	text: String
 
 	title: String | None

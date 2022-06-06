@@ -8,6 +8,8 @@ authors = ["Mateus Canelhas <mateus.canelhas@gmail.com>"]
 python = "^3.10"
 requests = "^2.27.1"
 trafilatura = "^1.2.2"
+luigi = "^3.0.3"
+apache-beam = "^2.39.0"
 
 [tool.poetry.dev-dependencies]
 

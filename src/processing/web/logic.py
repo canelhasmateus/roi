@@ -6,6 +6,7 @@ from urllib.parse import urlparse as parse_url
 
 import requests
 import trafilatura
+from requests import Response
 
 from src.processing.web.domain import *
 from src.processing.web.domain import ResponseInfo
@@ -90,6 +91,7 @@ def _parse_trafilatura( info: ResponseInfo ) -> PageInfo:
 		raise Exception( "No text found" )
 
 	return PageInfo(
+			url = info.url,
 			text = extract.get( "text", None ),
 			title = extract.get( "title", None ),
 			author = extract.get( "author", None ),
@@ -118,10 +120,10 @@ def default_url_parser() -> UrlParser:
 
 
 def default_fetcher() -> WebFetcher:
-	return lambda url: _fetch_url( url )
+	return _fetch_url
 
 
-def default_page_parser() -> ContentParser:
+def default_content_parser() -> ContentParser:
 	return _switch_parsers
 
 
