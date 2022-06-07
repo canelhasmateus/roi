@@ -25,14 +25,14 @@ def _remove_params( url: Url[ URaw ] ) -> Url[ UClean ]:
 
 
 def _parse_url( url: String ) -> Result[ Url[ UClean ] ]:
-	return (Result.ok( url )
-	        .map( parse_url )
-	        .map( lambda parsed: Url( hostname = parsed.hostname, scheme = parsed.scheme,
-	                                  netloc = parsed.netloc, path = parsed.path,
-	                                  query = parsed.query, raw = url ) )
-	        .map( _remove_params ))
 
+	url = url.strip()
+	parsed = parse_url( url )
+	good = Url( hostname = parsed.hostname, scheme = parsed.scheme,
+	            netloc = parsed.netloc, path = parsed.path,
+	            query = parsed.query, raw = url )
 
+	return Result.ok( good ).map( _remove_params )
 #
 
 def _mime_and_encoding( response: Response ) -> Tuple[ MimeType | None, String | None ]:
@@ -79,7 +79,8 @@ def _fetch_url( url: Url[ ... ], headers: Mapping[ String, String ] = None ) -> 
 #
 
 def _parse_trafilatura( info: ResponseInfo ) -> PageInfo:
-	text = info.content.decode( info.encoding )
+	encoding = info.encoding or "utf8"
+	text = info.content.decode(  encoding )
 	extract = trafilatura.bare_extraction( filecontent = text,
 	                                       include_comments = False,
 	                                       include_images = True,

@@ -12,8 +12,7 @@ def read_articles_tsv( filepath ) -> Iterable[ TabSeparated ]:
 
 
 def check_articles_processed( base_path, url: Url[ ... ] ) -> bool:
-	name = hashlib.md5( url.raw.encode() ).digest().hex()
-	filename = pathlib.Path( base_path ) / "raw" / name
+
 	if filename.exists():
 		return True
 	return False
@@ -23,9 +22,10 @@ def save_articles_response( base_path, info: ResponseInfo ) -> None:
 	url = info.url
 	name = hashlib.md5( url.raw.encode() ).digest().hex()
 	filename = pathlib.Path( base_path ) / "raw" / name
-	filename.parent.mkdir( parents = True , exist_ok = True)
-	with open( str( filename ), "wb" ) as file:
-		pickle.dump( info, file )
+	if not filename.exists():
+		filename.parent.mkdir( parents = True , exist_ok = True)
+		with open( str( filename ), "wb" ) as file:
+			pickle.dump( info, file )
 
 def save_article_content( base_path, content : PageInfo ) -> None:
 	url = content.url

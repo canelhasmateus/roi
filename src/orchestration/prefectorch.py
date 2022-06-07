@@ -1,11 +1,15 @@
 from __future__ import annotations
 
+import hashlib
 import os
+import pathlib
+import pickle
 import time
 from typing import List
 
 from prefect import task, Flow
 from prefect.engine.signals import SKIP
+from prefect.executors import LocalDaskExecutor
 
 from src.persistence.filesystem import read_articles_tsv, check_articles_processed, save_articles_response, save_article_content
 from src.processing.web.domain import ResponseInfo, UClean, Url, PageInfo
@@ -24,19 +28,21 @@ def readData() -> List[ Url[ UClean ] ]:
 			parse( url ).map( result.append )
 	return result
 
-@task
-def checkDone( url: Url[ UClean ] ) -> Url[ UClean ]:
 
-	processed = check_articles_processed( WEB_CONTENT_FILEPATH, url )
-	if processed:
-		raise SKIP( "Already fetched this url" )
 
-	return url
 
 @task
 def fetchResponse( url: Url[ ... ] ) -> ResponseInfo:
+
 	fetch_url = default_fetcher()
-	return fetch_url( url ).unwrap()
+	name = hashlib.md5( url.raw.encode() ).digest().hex()
+	cached_file = pathlib.Path( WEB_CONTENT_FILEPATH ) / "raw" / name
+	if cached_file.exists():
+		with open( str( cached_file) , "rb") as file:
+			res = pickle.load( file )
+	else:
+		res = fetch_url( url ).unwrap()
+	return res
 
 @task
 def persistRaw( info: ResponseInfo ) -> None:
@@ -54,15 +60,15 @@ def persistContent( content: PageInfo ) -> None:
 	save_article_content( WEB_CONTENT_FILEPATH , content)
 
 with Flow( "Hello-Flow" ) as flow:
-	data = readData()
-	pending = checkDone.map( data )
 
-	infos = fetchResponse.map( pending )
+	data = readData()
+	infos = fetchResponse.map( data )
 	persistRaw.map( infos )
 
 	processed = parseContent.map( infos )
 	persistContent.map( processed )
 
 finish_planning = time.time()
+flow.executor = LocalDaskExecutor( scheduler = "threads" , num_workers = 5)
 flow.run()
 finish = time.time()

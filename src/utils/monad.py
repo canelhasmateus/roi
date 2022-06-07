@@ -1,5 +1,5 @@
 from __future__ import annotations
-
+import traceback
 from typing import TypeVar, Callable, Generic
 
 K = TypeVar( "K" )
@@ -42,6 +42,7 @@ class Result( Generic[ K ] ):
 
 	def unwrap( self ) -> K:
 		if self.error:
+			traceback.print_exception( self.error )
 			raise self.error
 		return self.value
 
