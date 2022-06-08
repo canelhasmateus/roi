@@ -11,18 +11,18 @@ from prefect import task, Flow
 from prefect.engine.signals import SKIP
 from prefect.executors import LocalDaskExecutor
 
-from src.persistence.filesystem import read_articles_tsv, check_articles_processed, save_articles_response, save_article_content
+
 from src.processing.web.domain import ResponseInfo, UClean, Url, PageInfo
 from src.processing.web.logic import default_url_parser, default_fetcher, default_content_parser
+from src.processing.web.persistence import save_articles_response, read_articles_tsv, save_article_content, read_articles_response
 
-WEB_STREAM_FILEPATH = os.environ[ "GNOSIS_WEB_STREAM" ]
-WEB_CONTENT_FILEPATH = os.environ[ "GNOSIS_RESPONSE_PATH" ]
+
 @task
 def readData() -> List[ Url[ UClean ] ]:
 
 	result = [ ]
 	parse = default_url_parser()
-	for i, line in enumerate( read_articles_tsv( WEB_STREAM_FILEPATH ) ):
+	for i, line in enumerate( read_articles_tsv( ) ):
 		if i != 0:
 			time, kind, url = line.split( "\t" )
 			parse( url ).map( result.append )
@@ -34,30 +34,21 @@ def readData() -> List[ Url[ UClean ] ]:
 @task
 def fetchResponse( url: Url[ ... ] ) -> ResponseInfo:
 
-	fetch_url = default_fetcher()
-	name = hashlib.md5( url.raw.encode() ).digest().hex()
-	cached_file = pathlib.Path( WEB_CONTENT_FILEPATH ) / "raw" / name
-	if cached_file.exists():
-		with open( str( cached_file) , "rb") as file:
-			res = pickle.load( file )
-	else:
-		res = fetch_url( url ).unwrap()
-	return res
+	cached = read_articles_response( url )
+	return cached.orElse( lambda x : default_fetcher()( url ).unwrap())
 
 @task
 def persistRaw( info: ResponseInfo ) -> None:
-	save_articles_response( WEB_CONTENT_FILEPATH, info )
+	save_articles_response( info )
 
 @task
 def parseContent( content: ResponseInfo ) -> PageInfo:
 	parser = default_content_parser()
 	return parser( content ).unwrap()
 
-
-
 @task
 def persistContent( content: PageInfo ) -> None:
-	save_article_content( WEB_CONTENT_FILEPATH , content)
+	save_article_content( content)
 
 with Flow( "Hello-Flow" ) as flow:
 

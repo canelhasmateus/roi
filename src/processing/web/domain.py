@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import enum
+import hashlib
 from dataclasses import dataclass, replace
-from typing import NewType, TypeAlias, Iterable, Generic, TypeVar, Mapping, List, Protocol
+from typing import NewType, TypeAlias, Iterable, Generic, TypeVar, Mapping, List, Protocol, Literal
 
 from src.utils.monad import Result
 
@@ -20,9 +22,18 @@ UClean = NewType( "UClean", UrlStatus )
 S = TypeVar( "S", bound = UrlStatus )
 
 
-@dataclass( frozen = True)
+class UrlKinds( enum.Enum ):
+	YOUTUBE = "youtube"
+	ARXIV = "arxiv"
+	GITHUBIO = "github.io"
+	DATASKEPTIC = "dataskeptic"
+	OTHER = "dataskeptic"
+
+
+@dataclass( frozen = True )
 class Url( Generic[ S ] ):
 	raw: String
+	quality: String
 	scheme: String | None
 	netloc: String | None
 	path: String | None
@@ -33,8 +44,19 @@ class Url( Generic[ S ] ):
 		return replace( self, **kwargs )
 
 	@property
-	def domain( self ):
-		raise NotImplemented
+	def kind( self ) -> UrlKinds:
+		if "youtube.com" in self.hostname:
+			return UrlKinds.YOUTUBE
+		if "arxiv.com" in self.hostname:
+			return UrlKinds.ARXIV
+		if "github.io" in self.hostname:
+			return UrlKinds.GITHUBIO
+		if "dataskeptic.com" in self.hostname:
+			return UrlKinds.DATASKEPTIC
+		return UrlKinds.OTHER
+
+	def digest( self ) -> String:
+		return hashlib.md5( self.raw.encode() ).digest().hex()
 
 
 # noinspection PyUnresolvedReferences
@@ -46,6 +68,9 @@ class ResponseInfo:
 
 	mime: MimeType | None
 	encoding: TextEncoding | None
+
+	def text_content( self ):
+		...
 
 
 #
@@ -68,8 +93,12 @@ class PageInfo( Generic[ C ] ):
 	categories: Iterable[ String ] | None
 	tags: Iterable[ String ] | None
 	comments: Iterable[ String ] | None
+	preview: String | None
+
 	neighbors: Iterable[ Url[ URaw ] ]
 
+	def with_text( self, text: String ) -> PageInfo:
+		replace( self, text = text )
 
 #
 
@@ -81,7 +110,7 @@ class PageException( Exception ):
 
 
 class UrlParser( Protocol[ S ] ):
-	def __call__( self, string: String ) -> Result[ Url[ S ] ]:
+	def __call__( self, string: TabSeparated ) -> Result[ Url[ S ] ]:
 		...
 
 
@@ -90,6 +119,6 @@ class WebFetcher( Protocol ):
 		...
 
 
-class ContentParser( Protocol ):
+class PageParser( Protocol ):
 	def __call__( self, info: ResponseInfo ) -> Result[ PageInfo ]:
 		...

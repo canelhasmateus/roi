@@ -7,17 +7,22 @@ V = TypeVar( "V" )
 
 
 class Result( Generic[ K ] ):
-	__slots__ = ("value", "error")
+	__slots__ = ("__value", "__error")
 
 	def __init__( self, value: K = None, error: Exception = None ):
-		self.value = value
-		self.error = error
+		self.__value = value
+		self.__error = error
+
+	def is_success( self ) -> bool:
+		if self.__value:
+			return  True
+		return False
 
 	def map( self, fn: Callable[ [ K ], V ] ) -> Result[ V ]:
 
 		# noinspection PyBroadException
 		try:
-			v = fn( self.value )
+			v = fn( self.__value )
 			return Result.ok( v )
 		except Exception as e:
 			return Result.failure( e )
@@ -26,14 +31,23 @@ class Result( Generic[ K ] ):
 
 		# noinspection PyBroadException
 		try:
-			return fn( self.value )
+			return fn( self.__value )
 		except Exception as e:
 			return Result.failure( e )
 
+	def recover( self, handler : Callable[ [ Exception ] , K ] ) -> Result[ K ]:
+		if self.__error:
+			try:
+				res = handler( self.__error )
+				return Result.ok(  res )
+			except Exception as e:
+				return Result.failure( self.__error )
+		return self
+
 	def orElse( self, fallback: K | Callable[ [ ], K ] ) -> K:
 
-		if not self.error:
-			return self.value
+		if not self.__error:
+			return self.__value
 
 		if callable( fallback ):
 			return fallback()
@@ -41,10 +55,10 @@ class Result( Generic[ K ] ):
 		return fallback
 
 	def unwrap( self ) -> K:
-		if self.error:
-			traceback.print_exception( self.error )
-			raise self.error
-		return self.value
+		if self.__error:
+			traceback.print_exception( self.__error )
+			raise self.__error
+		return self.__value
 
 	@classmethod
 	def ok( cls, value: K ) -> Result[ K ]:
