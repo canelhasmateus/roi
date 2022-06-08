@@ -1,6 +1,6 @@
 from __future__ import annotations
 import traceback
-from typing import TypeVar, Callable, Generic
+from typing import TypeVar, Callable, Generic, overload
 
 K = TypeVar( "K" )
 V = TypeVar( "V" )
@@ -13,33 +13,29 @@ class Result( Generic[ K ] ):
 		self.__value = value
 		self.__error = error
 
-	def is_success( self ) -> bool:
+	def successful( self ) -> bool:
 		if self.__value:
 			return True
 		return False
 
-	def map( self, fn: Callable[ [ K ], V ] ) -> Result[ V ]:
+	def map( self, fn: Callable[ [ K, ... ], V ], **kwargs ) -> Result[ V ]:
 		# noinspection PyBroadException
-		if not self.is_success():
+		if not self.successful():
 			return self
 
 		try:
-			v = fn( self.__value )
+			v = fn( self.__value, **kwargs )
 			return Result.ok( v )
 		except Exception as e:
 			return Result.failure( e )
 
-	def flatMap( self, fn: Callable[ [ K ], Result[ V ] ] ) -> Result[ V ]:
-		if not self.is_success():
+	def flatMap( self, fn: Callable[ [ K ], Result[ V ] ] , **kwargs ) -> Result[ V ]:
+		if not self.successful():
 			return self
-		# noinspection PyBroadException
-		try:
-			return fn( self.__value )
-		except Exception as e:
-			return Result.failure( e )
+		return fn( self.__value, **kwargs )
 
 	def recover( self, handler: Callable[ [ Exception ], K ] ) -> Result[ K ]:
-		if not self.is_success():
+		if not self.successful():
 			try:
 				res = handler( self.__error )
 				return Result.ok( res )
@@ -47,19 +43,30 @@ class Result( Generic[ K ] ):
 				return Result.failure( self.__error )
 		return self
 
-	def orElse( self, fallback: K | Callable[ [ ], K ] ) -> K:
+	@overload
+	def orElse( self, fallback: K ) -> K:
+		...
 
-		if self.is_success():
+	@overload
+	def orElse( self, fallback: Callable[ [ Exception ], K ] ) -> K:
+		...
+
+	@overload
+	def orElse( self, fallback: Callable[ [ Exception ], None ] ) -> None:
+		...
+
+	def orElse( self, fallback ) -> K:
+		if self.successful():
 			return self.__value
 
 		if callable( fallback ):
-			return fallback()
+			res = fallback( self.__error )
+			return res
 
 		return fallback
 
-	def unwrap( self ) -> K:
+	def expect( self ) -> K:
 		if self.__error:
-			traceback.print_exception( self.__error )
 			raise self.__error
 		return self.__value
 
@@ -69,4 +76,5 @@ class Result( Generic[ K ] ):
 
 	@classmethod
 	def failure( cls, error: Exception ) -> Result[ K ]:
+
 		return cls( error = error )

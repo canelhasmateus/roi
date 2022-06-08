@@ -1,11 +1,10 @@
-import hashlib
 import os
 import pathlib
 import pickle
 import random
-from typing import Iterable, Any
+from typing import Iterable
 
-from src.processing.web.domain import TabSeparated, Url, ResponseInfo, PageInfo, String, PageException, Digestable
+from src.processing.web.domain import TabSeparated, UrlEvent, ResponseInfo, RichResponse, Digestable
 from src.utils.monad import Result
 
 WEB_STREAM_FILEPATH = os.environ.get( "GNOSIS_WEB_STREAM", "" )
@@ -36,13 +35,12 @@ def _pickle_from( filename: pathlib.Path ):
 
 def load_stream( filepath = None ) -> Iterable[ TabSeparated ]:
 	filepath = filepath or str( DEFAULT_STREAM_PATH )
-
 	with open( filepath, "r" ) as file:
-		for content in file.readlines():
-			yield content
+		for i, content in enumerate( file.readlines() ):
+			if i > 0:
+				yield content
 
-
-def load_response( url: Url, base_path: pathlib.Path = None ) -> Result[ ResponseInfo ]:
+def load_response( url: UrlEvent, base_path: pathlib.Path = None ) -> Result[ ResponseInfo ]:
 	base_path = base_path or DEFAULT_RAW_PATH
 	file_name = base_path / url.digest()
 	try:
@@ -59,14 +57,13 @@ def save_response( info: ResponseInfo, base_path: pathlib.Path = None ) -> None:
 	_pickle_to( base_path, info )
 
 
-def save_content( content: PageInfo, base_path: pathlib.Path = None ) -> None:
+def save_content( content: RichResponse, base_path: pathlib.Path = None ) -> None:
 	print( "Persisting Processed" )
 	base_path = base_path or DEFAULT_PROCESSED_PATH
 	_pickle_to( base_path, content )
 
 
-def save_errors( ex: PageException ) -> None:
+def save_errors( ex: Exception ) -> None:
 	print( "Persisting Errors" )
 
-	_pickle_to( DEFAULT_FAIL_PATH, {
-			"message": ex.args, } )
+	_pickle_to( DEFAULT_FAIL_PATH, { "message": ex.args, } )

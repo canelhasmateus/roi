@@ -3,22 +3,25 @@ from __future__ import annotations
 import enum
 import hashlib
 from dataclasses import dataclass, replace
-from typing import NewType, TypeAlias, Iterable, Generic, TypeVar, Mapping, List, Protocol, Literal
+from typing import NewType, TypeAlias, Iterable, Generic, TypeVar, Mapping, List, Protocol
+
+from requests import Response
 
 from src.utils.monad import Result
 
 String: TypeAlias = str
 TabSeparated: TypeAlias = str
 Binary: TypeAlias = bytes
-MimeType: NewType( "MimeType", str )
-TextEncoding: NewType( "TextEncoding", str )
-WebHeader: NewType( "WebHeader", Mapping[ String, String | List[ String ] ] )
+
+MimeType = NewType( "MimeType", str )
+TextEncoding = NewType( "TextEncoding", str )
+WebHeader = NewType( "WebHeader", Mapping[ String, String | List[ String ] ] )
 IsoTime = NewType( "IsoTime", str )
 
 #
 UrlStatus = NewType( "UrlStatus", object )
 URaw = NewType( "URaw", UrlStatus )
-UClean = NewType( "UClean", UrlStatus )
+UNorm = NewType( "UNorm", UrlStatus )
 S = TypeVar( "S", bound = UrlStatus )
 
 
@@ -27,11 +30,11 @@ class UrlKinds( enum.Enum ):
 	ARXIV = "arxiv"
 	GITHUBIO = "github.io"
 	DATASKEPTIC = "dataskeptic"
-	OTHER = "dataskeptic"
+	OTHER = "other"
 
 
 @dataclass( frozen = True )
-class Url( Generic[ S ] ):
+class UrlEvent( Generic[ S ] ):
 	raw: String
 	quality: String
 	scheme: String | None
@@ -40,7 +43,7 @@ class Url( Generic[ S ] ):
 	query: String | None
 	hostname: String | None
 
-	def update( self, kwargs ) -> Url[ S ]:
+	def update( self, kwargs ) -> UrlEvent[ S ]:
 		return replace( self, **kwargs )
 
 	@property
@@ -59,52 +62,40 @@ class Url( Generic[ S ] ):
 		return hashlib.md5( self.raw.encode() ).digest().hex()
 
 
-# noinspection PyUnresolvedReferences
-@dataclass
-class ResponseInfo:
-	url: Url[ ... ]
-	headers: WebHeader
-	content: String | Binary
-
-	mime: MimeType | None
-	encoding: TextEncoding | None
-
-	def text_content( self ):
-		...
-
-	def digest( self ) -> String:
-		return hashlib.md5( self.raw.encode() ).digest().hex()
-
-
+#
+#
 #
 
-ContentStatus = NewType( "ContentStatus", object )
-CRaw = NewType( "CRaw", ContentStatus )
-CRich = NewType( "CRich", ContentStatus )
-C = TypeVar( "C", bound = ContentStatus )
-
-
-@dataclass
-class PageInfo( Generic[ C ] ):
-	url: Url
+@dataclass()
+class ResponseEnrichment:
 	text: String
-
 	title: String | None
 	author: String | None
 	date: IsoTime | None
-
 	categories: Iterable[ String ] | None
 	tags: Iterable[ String ] | None
 	comments: Iterable[ String ] | None
 	preview: String | None
+	neighbors: Iterable[ UrlEvent[ URaw ] ]
 
-	neighbors: Iterable[ Url[ URaw ] ]
+	def update( self, **kwargs ) -> ResponseEnrichment:
+		return replace( self, **kwargs )
 
-	def with_text( self, text: String ) -> PageInfo:
-		return replace( self, text = text )
 
-	def digest( self, ) -> String:
+
+
+@dataclass
+class ResponseInfo:
+	url: UrlEvent[ ... ]
+	content: Response
+	structure: ResponseEnrichment | None
+
+	def digest( self ) -> String:
 		return hashlib.md5( self.url.raw.encode() ).digest().hex()
+
+
+	def update( self, **kwargs ) -> ResponseInfo:
+		return replace( self, **kwargs )
 
 
 #
@@ -116,18 +107,13 @@ class PageException( Exception ):
 		self.message = message
 
 
-class UrlParser( Protocol[ S ] ):
-	def __call__( self, string: TabSeparated ) -> Result[ Url[ S ] ]:
+class EventParser( Protocol[ S ] ):
+	def __call__( self, string: TabSeparated ) -> Result[ UrlEvent[ S ] ]:
 		...
 
 
 class WebFetcher( Protocol ):
-	def __call__( self, url: Url[ ... ], headers: Mapping[ String, String ] ) -> Result[ ResponseInfo ]:
-		...
-
-
-class PageParser( Protocol ):
-	def __call__( self, info: ResponseInfo ) -> Result[ PageInfo ]:
+	def __call__( self, url: UrlEvent[ ... ], headers: Mapping[ String, String ] ) -> Result[ ResponseInfo ]:
 		...
 
 

@@ -1,11 +1,9 @@
 from __future__ import annotations
 
 import itertools
-import pathlib
 import re
+import urllib.parse
 from types import SimpleNamespace
-from typing import Tuple, Optional
-from urllib.parse import urlparse as parse_url
 
 import lxml.etree
 import lxml.html
@@ -13,7 +11,6 @@ import requests
 import trafilatura
 import trafilatura.spider
 from lxml import etree
-from requests import Response
 
 from src.processing.web.domain import *
 from src.processing.web.domain import ResponseInfo
@@ -22,124 +19,78 @@ from src.utils.monad import Result
 _RE_FIND_YOUTUBE_ID = re.compile( r"v=([a-zA-Z0-9]+(?=\b|&))" )
 _RE_REMOVE_UTM = re.compile( r"&?utm_(source|medium|campaign|term|content)=[^&]*&?" )
 _RE_REMOVE_TIMESTAMP = re.compile( r"&?t=\d+[^&]*&?" )
-_USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/83.0.4103.116 Safari/537.36'
-
 remove_utm = lambda x: _RE_REMOVE_UTM.sub( "", x )
 remove_timestamp = lambda x: _RE_REMOVE_TIMESTAMP.sub( "", x )
 find_youtube_id = lambda url: _RE_FIND_YOUTUBE_ID.search( url ).group()
 
 
-# noinspection PyTypeChecker
+class EventParsing( SimpleNamespace ):
+	def _remove_params( url: UrlEvent[ URaw ] ) -> UrlEvent[ UNorm ]:
+		replacers = [ remove_utm ]
+		query = url.query
 
-def _remove_params( url: Url[ URaw ] ) -> Url[ UClean ]:
-	replacers = [ remove_utm ]
-	query = url.query
+		if url.kind == UrlKinds.YOUTUBE:
+			replacers.append( remove_timestamp )
 
-	if url.kind == UrlKinds.YOUTUBE:
-		replacers.append( remove_timestamp )
+		for transform in replacers:
+			query = transform( query )
 
-	for transform in replacers:
-		query = transform( query )
+		# noinspection PyTypeChecker
+		return url.update( { "query": query } )
 
-	return url.update( { "query": query } )
+	def parse_url( line: TabSeparated ) -> Result[ UrlEvent[ UNorm ] ]:
+		date, quality, url = line.strip().split( "\t" )
+		parsed = urllib.parse.urlparse( url )
+		# TODO  08/06/2022 Still a lot to do here. It seems to be tripping with very basic input , specially when scheme is not specifiec.
+		good = UrlEvent(
+				raw = url,
+				quality = quality,
+				hostname = parsed.hostname or "",
+				scheme = parsed.scheme or "http",
+				netloc = parsed.netloc,
+				path = parsed.path or "",
+				query = parsed.query or ""
+		)
 
+		if not good.hostname:
+			print( f"{good.raw} hostname bug" )
+			return Result.failure( Exception( "No hostname found" ) )
 
-def _parse_url( line: TabSeparated ) -> Result[ Url[ UClean ] ]:
-	date, quality, url = line.strip().split( "\t" )
-	parsed = parse_url( url )
-
-	good = Url(
-			raw = url,
-			quality = quality,
-			hostname = parsed.hostname,
-			scheme = parsed.scheme or "http",
-			netloc = parsed.netloc,
-			path = parsed.path or "",
-			query = parsed.query or ""
-	)
-
-	if not good.hostname:
-		return Result.failure( Exception( "No hostname found" ) )
-
-	return Result.ok( good ).map( _remove_params )
-
-
-#
-def _mime_and_encoding( response: Response ) -> Tuple[ MimeType | None, String | None ]:
-	headers: WebHeader = response.headers
-	content_type = headers.get( "Content-Type", "" )
-	match content_type.split( ";" ):
-		case [ mime, charset ]:
-			mime_type = mime
-			encoding = charset.split( "=" )[ 1 ]
-		case [ mime ]:
-			mime_type = mime
-			encoding = "utf-8"
-		case _:
-			mime_type = "text/html"
-			encoding = "utf-8"
-
-	return mime_type, encoding
-
-
-def _fetch_url( url: Url[ ... ], headers: Mapping[ String, String ] = None ) -> Result[ ResponseInfo ]:
-	headers = headers or { 'User-Agent': _USER_AGENT }
-	# TODO  07/06/2022 conditionally change fetchers
-	try:
-		response = requests.get( url.raw, headers = headers )
-		if response.ok:
-			headers = response.headers
-			mime_type, encoding = _mime_and_encoding( response )
-			info = ResponseInfo( url = url,
-			                     headers = headers,
-			                     content = response.content,
-			                     mime = mime_type,
-			                     encoding = encoding )
-			return Result.ok( info )
-
-		exception = PageException( url = url,
-		                           status = response.status_code,
-		                           message = response.reason )
-		return Result.failure( exception )
-	except Exception as e:
-		return Result.failure( e )
+		return Result.ok( good ).map( EventParsing._remove_params )
 
 
 class Htmls( SimpleNamespace ):
 
 	@staticmethod
-	def markdown_references( text: String ) -> PageInfo:
-		return [ ]
+	def as_element( response: Response ) -> lxml.html.HtmlElement:
+		encoding = Htmls.encoding( response )
+		return etree.HTML( response.content.decode( encoding ) )
 
 	@staticmethod
-	def generic_info( response: ResponseInfo, page: lxml.html.HtmlElement ) -> PageInfo:
+	def mime( response: Response ) -> MimeType:
+		headers: WebHeader = response.headers
+		content_type = headers.get( "Content-Type", "" )
+		match content_type.split( ";" ):
+			case [ mime, _ ]:
+				mime_type = mime
+			case [ mime ]:
+				mime_type = mime
+			case _:
+				mime_type = "text/html"
+		return mime_type
 
-		result = trafilatura.bare_extraction(
-				filecontent = page,
-				include_comments = False,
-				include_images = True,
-				include_formatting = True,
-				include_links = True,
-		)
-
-		text = result.get( "text", None )
-		title = result.get( "title", None )
-		author = result.get( "author", None )
-		date = result.get( "date", None )
-		categories = result.get( "categories", None )
-		tags = result.get( "tags", None )
-
-		neighbors = Htmls.markdown_references( text )
-		return PageInfo(
-				url = response.url,
-				text = text,
-				title = title,
-				author = author,
-				date = date,
-				categories = categories,
-				tags = tags,
-				comments = [ ],
-				neighbors = neighbors )
+	@staticmethod
+	def encoding( response: Response ) -> TextEncoding:
+		headers = response.headers
+		content_type = headers.get( "Content-Type", "" )
+		match content_type.split( ";" ):
+			case [ _, charset ]:
+				encoding = charset.split( "=" )[ 1 ]
+			case [ _ ]:
+				encoding = "utf-8"
+			case _:
+				encoding = "utf-8"
+		return encoding
 
 	@staticmethod
 	def toText( e ):
@@ -200,6 +151,44 @@ class Htmls( SimpleNamespace ):
 		return Htmls.first( ogImage, twitterImage, itemProp, headIcon, anyImage )
 
 	@staticmethod
+	def getHtmlStructure( response: Response ) -> ResponseEnrichment:
+		html_element = Htmls.as_element( response )
+		result = trafilatura.bare_extraction( filecontent = html_element,
+		                                      include_comments = False,
+		                                      include_images = True,
+		                                      include_formatting = True,
+		                                      include_links = True,
+		                                      )
+
+		text = result.get( "text", None )
+		title = result.get( "title", None )
+		author = result.get( "author", None )
+		date = result.get( "date", None )
+		categories = result.get( "categories", None )
+		tags = result.get( "tags", None )
+		neighbors = [ ]
+
+		# TODO  08/06/2022
+
+		return ResponseEnrichment(
+				text = text,
+				title = title,
+				author = author,
+				date = date,
+				categories = categories,
+				tags = tags,
+				comments = [ ],
+				neighbors = neighbors )
+
+	@staticmethod
+	def parse_structure( info: Response ) -> Result[ ResponseEnrichment ]:
+		match Htmls.mime( info ):
+			case "text/html":
+				return Result.ok( info ).flatMap( Htmls.getHtmlStructure )
+
+
+class Youtube( SimpleNamespace ):
+	@staticmethod
 	def _youtube_transcript( info: ResponseInfo ) -> Result[ String ]:
 
 		try:
@@ -213,47 +202,50 @@ class Htmls( SimpleNamespace ):
 		except Exception as e:
 			return Result.failure( e )
 
+	...
+
+
+_USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/83.0.4103.116 Safari/537.36'
+
+
+class Enrichment( SimpleNamespace ):
+	...
+
 	@staticmethod
-	def page_info( info: ResponseInfo ) -> Result[ PageInfo ]:
-		encoding = info.encoding or "utf8"
-		html_element = etree.HTML( info.content.decode( encoding ) )
-		base_result = Htmls.generic_info( info, html_element )
-		text = base_result.text
-		match info.url.kind:
-			case UrlKinds.YOUTUBE:
-				text = Htmls._youtube_transcript( info ).orElse( text )
-			case UrlKinds.DATASKEPTIC:
-				# todo pick <audio> tags
-				return Result.failure( Exception( "Probably audio" ) )
-			case UrlKinds.GITHUBIO:
-				return Result.failure( Exception( "Github.io " ) )
-			case _:
-				...
+	def _fetch_url( url: UrlEvent[ ... ], headers: Mapping[ String, String ] = None ) -> Result[ ResponseInfo ]:
+		headers = headers or { 'User-Agent': _USER_AGENT }
+		try:
+			response = requests.get( url.raw, headers = headers )
+			if response.ok:
+				rich = Htmls.parse_structure( response ).orElse( None )
+				info = ResponseInfo( url = url, content = response, structure = rich )
+				return Result.ok( info )
+			return Result.failure( Exception( "Response was not ok" ) )
+		except Exception as e:
+			return Result.failure( e )
 
-		Result.ok( base_result.with_text( text ) )
-
-
-def _switch_parsers( info: ResponseInfo ) -> Result[ PageInfo[ CRich ] ]:
-	match info.mime:
-		case "text/html":
-			return Htmls.page_info( info )
-		case "application/pdf":
-			return Result.failure( Exception( "PDF not supported for now" ) )
-		case other:
-			return Result.failure( Exception( f"Unsupported mime type {other}" ) )
+	@staticmethod
+	def _parse_response( info: ResponseInfo ) -> Result[ ResponseInfo ]:
+		match info.mime:
+			case "text/html":
+				return Htmls.parse_structure( info )
+			case "application/pdf":
+				return Result.failure( Exception( "PDF not supported for now" ) )
+			case other:
+				return Result.failure( Exception( f"Unsupported mime type {other}" ) )
 
 
 #
-def default_url_parser() -> UrlParser:
-	return _parse_url
+def default_url_parser() -> EventParser:
+	return EventParsing.parse_url
 
 
-def default_fetcher() -> WebFetcher:
+def default_response_fetcher() -> WebFetcher:
 	return _fetch_url
 
 
-def default_content_parser() -> PageParser:
-	return _switch_parsers
+def default_response_processer() -> ResponseProcesser:
+	return _parse_response
 
 
 if __name__ == '__main__':
@@ -274,7 +266,7 @@ if __name__ == '__main__':
 
 		def testBasicParsing( self ):
 			parse = default_url_parser()
-			parsed = parse( "https://akti.canelhas.io/resource/1.html?param=1#fragment" ).unwrap()
+			parsed = parse( "https://akti.canelhas.io/resource/1.html?param=1#fragment" ).expect()
 			self.assertEqual( parsed.scheme, "https" )
 			self.assertEqual( parsed.hostname, "akti.canelhas.io" )
 			self.assertEqual( parsed.path, "/resource/1.html" )
@@ -282,7 +274,7 @@ if __name__ == '__main__':
 
 		def testCleanUrl( self ):
 			parse = default_url_parser()
-			cleaned = parse( "https://akti.canelhas.io/resource/1.html?utm_campaign=alguma&param=1&utm_source=medium#fragment" ).unwrap()
+			cleaned = parse( "https://akti.canelhas.io/resource/1.html?utm_campaign=alguma&param=1&utm_source=medium#fragment" ).expect()
 			self.assertEqual( cleaned.query, "param=1" )
 
 

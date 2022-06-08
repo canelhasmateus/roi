@@ -1,47 +1,51 @@
+import random
 from typing import Iterable
 
-from src.processing.web.domain import ResponseInfo, TabSeparated, Url, UClean, PageInfo
-from src.processing.web.logic import default_fetcher, default_url_parser, default_content_parser
+from requests import Response
+
+from src.processing.web.domain import ResponseInfo, TabSeparated, UrlEvent, UNorm, RichResponse
+from src.processing.web.logic import default_response_fetcher, default_url_parser, default_response_processer
 from src.processing.web.persistence import load_response, save_response, save_errors, save_content, load_stream
 from src.utils.monad import Result
 
 
-def loadStream() -> Iterable[ Url ]:
-	parse = default_url_parser()
+def baseLoadStream() -> Iterable[ UrlEvent ]:
 	for line in load_stream():
-		yield parse( line )
+		dice = random.randint( 1, 100_000 )
+		if dice <= 1000:
+			yield baseParseUrl( line )
 
 
-def parseUrl( line: TabSeparated ) -> Result[ Url[ UClean ] ]:
+def baseParseUrl( line: TabSeparated ) -> Result[ UrlEvent[ UNorm ] ]:
 	parser = default_url_parser()
 	return parser( line )
 
 
-def fetchResponse( url: Url ) -> Result[ ResponseInfo ]:
+def baseFetchResponse( url: UrlEvent ) -> Result[ ResponseInfo ]:
 	cached = load_response( url )
-	if cached.is_success():
+	if cached.successful():
 		print( "Cached Response" )
 		return cached
 
+	if True:
+		return Result.failure( Exception( "No cached response found." ) )
+
 	print( "Fetching Response" )
-	fetcher = default_fetcher()
+	fetcher = default_response_fetcher()
 	return fetcher( url )
 
 
-def persistRaw( info: Result[ ResponseInfo ] ) -> None:
-	(info
-	 .map( save_response )
-	 .recover( save_errors )
-	 )
+def basePersistResponse( info: Result[ ResponseInfo ] ) -> None:
+	if False:
+		info.map( save_response ).orElse( save_errors )
 
 
-def parseResponse( content: ResponseInfo ) -> Result[ PageInfo ]:
+def baseProcessResponse( content: Response ) -> Result[ RichResponse ]:
 	print( "Processing content!" )
-	parser = default_content_parser()
+	parser = default_response_processer()
 	return parser( content )
 
 
-def persistProcessed( content: Result[ PageInfo ] ) -> None:
-	(content
-	 .map( save_content )
-	 .recover( save_errors ))
+def basePersistProcessed( content: Result[ RichResponse ] ) -> None:
+	if False:
+		content.map( save_content ).orElse( save_errors )
