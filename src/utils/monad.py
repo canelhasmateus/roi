@@ -15,12 +15,14 @@ class Result( Generic[ K ] ):
 
 	def is_success( self ) -> bool:
 		if self.__value:
-			return  True
+			return True
 		return False
 
 	def map( self, fn: Callable[ [ K ], V ] ) -> Result[ V ]:
-
 		# noinspection PyBroadException
+		if not self.is_success():
+			return self
+
 		try:
 			v = fn( self.__value )
 			return Result.ok( v )
@@ -28,25 +30,26 @@ class Result( Generic[ K ] ):
 			return Result.failure( e )
 
 	def flatMap( self, fn: Callable[ [ K ], Result[ V ] ] ) -> Result[ V ]:
-
+		if not self.is_success():
+			return self
 		# noinspection PyBroadException
 		try:
 			return fn( self.__value )
 		except Exception as e:
 			return Result.failure( e )
 
-	def recover( self, handler : Callable[ [ Exception ] , K ] ) -> Result[ K ]:
-		if self.__error:
+	def recover( self, handler: Callable[ [ Exception ], K ] ) -> Result[ K ]:
+		if not self.is_success():
 			try:
 				res = handler( self.__error )
-				return Result.ok(  res )
+				return Result.ok( res )
 			except Exception as e:
 				return Result.failure( self.__error )
 		return self
 
 	def orElse( self, fallback: K | Callable[ [ ], K ] ) -> K:
 
-		if not self.__error:
+		if self.is_success():
 			return self.__value
 
 		if callable( fallback ):

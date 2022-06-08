@@ -10,6 +10,7 @@ requests = "^2.27.1"
 trafilatura = "^1.2.2"
 luigi = "^3.0.3"
 apache-beam = "^2.39.0"
+pandas = "^1.4.2"
 
 [tool.poetry.dev-dependencies]
 

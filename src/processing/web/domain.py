@@ -72,6 +72,9 @@ class ResponseInfo:
 	def text_content( self ):
 		...
 
+	def digest( self ) -> String:
+		return hashlib.md5( self.raw.encode() ).digest().hex()
+
 
 #
 
@@ -98,7 +101,11 @@ class PageInfo( Generic[ C ] ):
 	neighbors: Iterable[ Url[ URaw ] ]
 
 	def with_text( self, text: String ) -> PageInfo:
-		replace( self, text = text )
+		return replace( self, text = text )
+
+	def digest( self, ) -> String:
+		return hashlib.md5( self.url.raw.encode() ).digest().hex()
+
 
 #
 
@@ -121,4 +128,9 @@ class WebFetcher( Protocol ):
 
 class PageParser( Protocol ):
 	def __call__( self, info: ResponseInfo ) -> Result[ PageInfo ]:
+		...
+
+
+class Digestable( Protocol ):
+	def digest( self ) -> String:
 		...

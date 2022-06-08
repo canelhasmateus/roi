@@ -222,9 +222,8 @@ class Htmls( SimpleNamespace ):
 		match info.url.kind:
 			case UrlKinds.YOUTUBE:
 				text = Htmls._youtube_transcript( info ).orElse( text )
-			case UrlKinds.ARXIV:
-				return Result.failure( Exception( "Arxiv, but html." ) )
 			case UrlKinds.DATASKEPTIC:
+				# todo pick <audio> tags
 				return Result.failure( Exception( "Probably audio" ) )
 			case UrlKinds.GITHUBIO:
 				return Result.failure( Exception( "Github.io " ) )
