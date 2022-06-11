@@ -1,11 +1,10 @@
 import os
 import pathlib
 import pickle
-import random
 from typing import Iterable
 
-from src.processing.web.domain import TabSeparated, UrlEvent, ResponseInfo, RichResponse, Digestable
-from src.utils.monad import Result
+from roi_utils import Result
+from .domain import TabSeparated, UrlEvent, ResponseInfo, Digestable, PageContent
 
 WEB_STREAM_FILEPATH = os.environ.get( "GNOSIS_WEB_STREAM", "" )
 DEFAULT_STREAM_PATH = pathlib.Path( WEB_STREAM_FILEPATH )
@@ -14,7 +13,7 @@ WEB_RAW_FILEPATH = os.environ.get( "GNOSIS_RAW_PATH", "" )
 DEFAULT_RAW_PATH = pathlib.Path( WEB_RAW_FILEPATH ) / "raw"
 
 WEB_PROCESSED_PATH = os.environ.get( "GNOSIS_PROCESSED_PATH", "" )
-DEFAULT_PROCESSED_PATH = pathlib.Path( WEB_PROCESSED_PATH ) / "processed"
+DEFAULT_ENRICHMENT_PATH = pathlib.Path( WEB_PROCESSED_PATH ) / "processed"
 
 WEB_FAIL_PATH = os.environ.get( "GNOSIS_FAIL_PATH", "" )
 DEFAULT_FAIL_PATH = pathlib.Path( WEB_FAIL_PATH ) / "fail"
@@ -40,6 +39,7 @@ def load_stream( filepath = None ) -> Iterable[ TabSeparated ]:
 			if i > 0:
 				yield content
 
+
 def load_response( url: UrlEvent, base_path: pathlib.Path = None ) -> Result[ ResponseInfo ]:
 	base_path = base_path or DEFAULT_RAW_PATH
 	file_name = base_path / url.digest()
@@ -57,13 +57,13 @@ def save_response( info: ResponseInfo, base_path: pathlib.Path = None ) -> None:
 	_pickle_to( base_path, info )
 
 
-def save_content( content: RichResponse, base_path: pathlib.Path = None ) -> None:
+def save_enrichment( content: PageContent, base_path: pathlib.Path = None ) -> None:
 	print( "Persisting Processed" )
-	base_path = base_path or DEFAULT_PROCESSED_PATH
+	base_path = base_path or DEFAULT_ENRICHMENT_PATH
 	_pickle_to( base_path, content )
 
 
 def save_errors( ex: Exception ) -> None:
 	print( "Persisting Errors" )
-
-	_pickle_to( DEFAULT_FAIL_PATH, { "message": ex.args, } )
+	if False:
+		_pickle_to( DEFAULT_FAIL_PATH, { "message": ex.args, } )

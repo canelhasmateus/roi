@@ -2,14 +2,15 @@ from __future__ import annotations
 
 import enum
 import hashlib
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, replace, field
 from typing import NewType, TypeAlias, Iterable, Generic, TypeVar, Mapping, List, Protocol
 
 from requests import Response
 
-from src.utils.monad import Result
+from roi_utils import Result
 
 String: TypeAlias = str
+Second: TypeAlias = int
 TabSeparated: TypeAlias = str
 Binary: TypeAlias = bytes
 
@@ -67,32 +68,33 @@ class UrlEvent( Generic[ S ] ):
 #
 
 @dataclass()
-class ResponseEnrichment:
+class PageContent:
+	url: UrlEvent
 	text: String
-	title: String | None
-	author: String | None
-	date: IsoTime | None
-	categories: Iterable[ String ] | None
-	tags: Iterable[ String ] | None
-	comments: Iterable[ String ] | None
-	preview: String | None
-	neighbors: Iterable[ UrlEvent[ URaw ] ]
+	title: String | None = None
+	duration: Second | None = None
+	author: String | None = None
+	date: IsoTime | None = None
+	image: String | None = None
+	tags: Iterable[ String ] | None = None
+	neighbors: Iterable[ String ] = field( default_factory = list )
+	categories: Iterable[ String ] | None = field( default_factory = list )
+	comments: Iterable[ String ] | None = field( default_factory = list )
 
-	def update( self, **kwargs ) -> ResponseEnrichment:
+	def update( self, **kwargs ) -> PageContent:
 		return replace( self, **kwargs )
 
-
+	def digest( self ) -> String:
+		return hashlib.md5( self.url.raw.encode() ).digest().hex()
 
 
 @dataclass
 class ResponseInfo:
 	url: UrlEvent[ ... ]
 	content: Response
-	structure: ResponseEnrichment | None
 
 	def digest( self ) -> String:
 		return hashlib.md5( self.url.raw.encode() ).digest().hex()
-
 
 	def update( self, **kwargs ) -> ResponseInfo:
 		return replace( self, **kwargs )
@@ -114,6 +116,11 @@ class EventParser( Protocol[ S ] ):
 
 class WebFetcher( Protocol ):
 	def __call__( self, url: UrlEvent[ ... ], headers: Mapping[ String, String ] ) -> Result[ ResponseInfo ]:
+		...
+
+
+class ResponseProcesser( Protocol ):
+	def __call__( self, response: ResponseInfo ) -> Result[ PageContent ]:
 		...
 
 
