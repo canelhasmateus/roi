@@ -39,7 +39,7 @@ def baseProcessResponse( content: ResponseInfo ) -> Result[ PageContent ]:
 	print( "Processing content!" )
 	parser = default_response_processer()
 	return parser( content )
-
+8
 
 def basePersistProcessed( content: Result[ PageContent ] ) -> None:
 	content.map( save_enrichment ).orElse( save_errors )
