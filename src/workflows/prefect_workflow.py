@@ -1,14 +1,12 @@
 from __future__ import annotations
 
-import time
 from typing import Iterable
 
 from prefect import task, Flow
+from prefect.executors import LocalDaskExecutor
 
-from src.processing.web.domain import ResponseInfo, UNorm, UrlEvent, RichResponse
-from src.processing.web.persistence import load_response
-from src.processing.web.processing import baseLoadStream, basePersistResponse, baseProcessResponse, basePersistProcessed, baseFetchResponse
-from src.utils.monad import Result
+from roi_utils import Result
+from roi_web import UrlEvent, UNorm, baseLoadStream, ResponseInfo, baseFetchResponse, basePersistResponse, baseProcessResponse, basePersistProcessed, PageContent
 
 
 @task
@@ -18,7 +16,9 @@ def prefect_load_stream() -> Iterable[ UrlEvent[ UNorm ] ]:
 
 @task
 def prefect_fetch_response( url: Result[ UrlEvent[ ... ] ] ) -> Result[ ResponseInfo ]:
-	return url.flatMap( baseFetchResponse )
+	res = url.flatMap( baseFetchResponse )
+	res.expect()
+	return res
 
 
 @task
@@ -27,16 +27,16 @@ def prefect_persist_response( info: Result[ ResponseInfo ] ) -> None:
 
 
 @task
-def prefect_process_response( content: Result[ ResponseInfo ] ) -> Result[ RichResponse ]:
+def prefect_process_response( content: Result[ ResponseInfo ] ) -> Result[ PageContent ]:
 	return content.flatMap( baseProcessResponse )
 
 
 @task
-def prefect_persist_processed( content: Result[ RichResponse ] ) -> None:
+def prefect_persist_processed( content: Result[ PageContent ] ) -> None:
 	basePersistProcessed( content )
 
 
-with Flow( "Hello-Flow" ) as flow:
+with Flow( "Article Extraction" ) as flow:
 	data = prefect_load_stream()
 
 	responses = prefect_fetch_response.map( data )
@@ -45,7 +45,5 @@ with Flow( "Hello-Flow" ) as flow:
 	processed = prefect_process_response.map( responses )
 	prefect_persist_processed.map( processed )
 
-
-# flow.executor = LocalDaskExecutor( scheduler = "threads", num_workers = 5 )
-flow.run()
-finish = time.time()
+flow.executor = LocalDaskExecutor( num_workers = 30 )
+flow.register( "Gnosis" )

@@ -33,7 +33,7 @@ def _dump_to( base_path: pathlib.Path, obj: Digestable ):
 		print( "Serialized!" )
 
 
-def load_from( filename: pathlib.Path , ) -> Mapping:
+def load_from( filename: pathlib.Path ) -> Mapping:
 	with filename.open("rb") as file:
 		return pickle.load( file )
 
@@ -50,7 +50,7 @@ def load_response( file_name : String, base_path: pathlib.Path = None ) -> Resul
 	base_path = base_path or DEFAULT_RAW_PATH
 	file_name = base_path / file_name
 	try:
-		res = ( load_from( file_name ) )
+		res = ResponseInfo.from_dict( load_from( file_name ) )
 		print( "Loaded Response" )
 		return Result.ok( res )
 	except Exception as e:

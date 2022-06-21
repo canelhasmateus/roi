@@ -299,7 +299,7 @@ class Htmls( SimpleNamespace ):
 
 		if isinstance( response, ResponseInfo ):
 			content = response.content.content.decode( "utf-8" )
-		elif isinstance( response, (Response,CResponse)  ):
+		elif isinstance( response, Response ):
 			content = response.content.decode( "utf-8" )
 		elif isinstance( response, String ):
 			content = response
