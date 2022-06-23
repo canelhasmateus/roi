@@ -6,7 +6,7 @@ from prefect import task, Flow
 from prefect.executors import LocalDaskExecutor
 
 from roi_utils import Result
-from roi_web import UrlEvent, UNorm, baseLoadStream, ResponseInfo, baseFetchResponse, basePersistResponse, baseProcessResponse, basePersistProcessed, PageContent
+from roi_web import UrlEvent, UNorm, baseLoadStream, WebArchive, fetchResponseBase, persistResponseBase, baseProcessResponse, basePersistProcessed, PageContent
 
 
 @task
@@ -15,19 +15,17 @@ def prefect_load_stream() -> Iterable[ UrlEvent[ UNorm ] ]:
 
 
 @task
-def prefect_fetch_response( url: Result[ UrlEvent[ ... ] ] ) -> Result[ ResponseInfo ]:
-	res = url.flatMap( baseFetchResponse )
-	res.expect()
-	return res
+def prefect_fetch_response( url: Result[ UrlEvent[ ... ] ] ) -> Result[ WebArchive ]:
+	return url.map( fetchResponseBase )
 
 
 @task
-def prefect_persist_response( info: Result[ ResponseInfo ] ) -> None:
-	basePersistResponse( info )
+def prefect_persist_response( info: Result[ WebArchive ] ) -> None:
+	info.map( persistResponseBase )
 
 
 @task
-def prefect_process_response( content: Result[ ResponseInfo ] ) -> Result[ PageContent ]:
+def prefect_process_response( content: Result[ WebArchive ] ) -> Result[ PageContent ]:
 	return content.flatMap( baseProcessResponse )
 
 
@@ -42,8 +40,9 @@ with Flow( "Article Extraction" ) as flow:
 	responses = prefect_fetch_response.map( data )
 	prefect_persist_response.map( responses )
 
-	processed = prefect_process_response.map( responses )
-	prefect_persist_processed.map( processed )
+	# processed = prefect_process_response.map( responses )
+	# prefect_persist_processed.map( processed )
 
 flow.executor = LocalDaskExecutor( num_workers = 30 )
-flow.register( "Gnosis" )
+# flow.register( "Gnosis" )
+flow.run()

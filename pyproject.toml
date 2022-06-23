@@ -12,6 +12,8 @@ luigi = "^3.0.3"
 apache-beam = "^2.39.0"
 pandas = "^1.4.2"
 aiohttp = "^3.8.1"
+warcio = "^1.7.4"
+aiofiles = "^0.8.0"
 
 [tool.poetry.dev-dependencies]
 

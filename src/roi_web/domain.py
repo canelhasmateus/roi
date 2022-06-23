@@ -6,6 +6,7 @@ from dataclasses import dataclass, replace, field
 from typing import NewType, TypeAlias, Iterable, Generic, TypeVar, Mapping, List, Protocol
 
 from requests import Response
+from warcio.recordloader import ArcWarcRecord
 
 from roi_utils import Result
 
@@ -87,25 +88,21 @@ class PageContent:
 	def digest( self ) -> String:
 		return hashlib.md5( self.url.raw.encode() ).digest().hex()
 
-@dataclass
-class CResponse:
-	content : bytes
-	headers : WebHeader
 
 @dataclass
-class ResponseInfo:
+class WebArchive:
 	url: UrlEvent[ ... ]
-	content: CResponse
+	content: Iterable[ ArcWarcRecord ]
 
 	def digest( self ) -> String:
 		return hashlib.md5( self.url.raw.encode() ).digest().hex()
 
-	def update( self, **kwargs ) -> ResponseInfo:
+	def update( self, **kwargs ) -> WebArchive:
 		return replace( self, **kwargs )
 
 	@classmethod
-	def from_dict( cls, res ) -> ResponseInfo:
-		return  ResponseInfo( **res )
+	def from_dict( cls, res ) -> WebArchive:
+		return  WebArchive( **res )
 
 
 
@@ -124,12 +121,12 @@ class EventParser( Protocol[ S ] ):
 
 
 class WebFetcher( Protocol ):
-	def __call__( self, url: UrlEvent[ ... ], headers: Mapping[ String, String ] ) -> Result[ ResponseInfo ]:
+	def __call__( self, url: UrlEvent[ ... ], headers: Mapping[ String, String ] ) -> WebArchive:
 		...
 
 
 class ResponseProcesser( Protocol ):
-	def __call__( self, response: ResponseInfo ) -> Result[ PageContent ]:
+	def __call__( self, response: WebArchive ) -> Result[ PageContent ]:
 		...
 
 

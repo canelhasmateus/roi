@@ -1,17 +1,24 @@
 from __future__ import annotations
 
+import io
+
+from aiohttp import ClientSession
+from warcio import ArchiveIterator, StatusAndHeaders
+from warcio.capture_http import capture_http
+from warcio.warcwriter import BufferWARCWriter
+
+_a = None
+
 import itertools
 import re
 import urllib.parse
 from types import SimpleNamespace
 
-import aiohttp
 import lxml.etree
 import lxml.html
 import requests
 import trafilatura
 import trafilatura.spider
-from aiohttp import ClientResponse
 from lxml import etree
 
 from .domain import *
@@ -59,24 +66,40 @@ class Events( SimpleNamespace ):
 
 class Fetching( SimpleNamespace ):
 	_USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/83.0.4103.116 Safari/537.36'
+	session = None
 	...
 
 	@staticmethod
-	def fetch_url( url: UrlEvent[ ... ], headers: Mapping[ String, String ] = None ) -> Result[ ResponseInfo ]:
+	def fetch_url( url: UrlEvent[ ... ], headers: Mapping[ String, String ] = None ) -> WebArchive:
 		headers = headers or { 'User-Agent': Fetching._USER_AGENT }
-		try:
-			response = requests.get( url.raw, headers = headers )
-			if response.ok:
-				content = CResponse( content = response.content, headers = response.headers )
-				res = ResponseInfo( url = url, content = content )
-				return Result.ok( res )
-			return Result.failure( Exception( "Response was not ok" ) )
-		except Exception as e:
-			return Result.failure( e )
+		with capture_http() as writer:
+			try:
+				requests.get( url.raw, headers = headers )
+			except Exception as e:
+				print( e )
 
+		records = [ record for record in ArchiveIterator( writer.get_stream() ) ]
+		return WebArchive( url = url,
+		                   content = records )
+
+	@staticmethod
+	async def async_fetch_url( session : ClientSession, url: UrlEvent ):
+		async with session.get( url.raw ) as resp:
+			writer = BufferWARCWriter()
+			content = await resp.read()
+			headers = StatusAndHeaders( f"{resp.status} {resp.reason}",
+			                            headers = (resp.headers.items()),
+			                            protocol = "HTTP/1.1" )
+
+			record = writer.create_warc_record( url.raw, 'response',
+			                                    payload = io.BytesIO( content ),
+			                                    http_headers = headers )
+
+			return WebArchive( url = url, content = [ record ] )
 
 class Youtube( SimpleNamespace ):
 	_RE_FIND_DURATION = re.compile( r"PT(\d+)M(\d+)S" )
+
 
 	@staticmethod
 	def title( html: etree.HTML ) -> String | None:
@@ -158,7 +181,7 @@ class Youtube( SimpleNamespace ):
 		return text
 
 	@staticmethod
-	def structure( response: ResponseInfo ) -> PageContent:
+	def structure( response: WebArchive ) -> PageContent:
 		element = Htmls.element( response )
 
 		duration = Youtube.duration( element )
@@ -180,7 +203,7 @@ class Youtube( SimpleNamespace ):
 class Htmls( SimpleNamespace ):
 
 	@staticmethod
-	def mime( response: ResponseInfo ) -> MimeType:
+	def mime( response: WebArchive ) -> MimeType:
 		headers: WebHeader = response.content.headers
 		content_type = headers.get( "Content-Type", "" )
 		match content_type.split( ";" ):
@@ -259,7 +282,7 @@ class Htmls( SimpleNamespace ):
 		return Htmls.first( ogImage, twitterImage, itemProp, headIcon, anyImage )
 
 	@staticmethod
-	def structure( response: ResponseInfo ) -> PageContent:
+	def structure( response: WebArchive ) -> PageContent:
 		html_element = Htmls.element( response.content )
 		result = trafilatura.bare_extraction( filecontent = html_element,
 		                                      include_comments = False,
@@ -295,11 +318,11 @@ class Htmls( SimpleNamespace ):
 		                    )
 
 	@staticmethod
-	def element( response: ResponseInfo | Response | String ) -> lxml.html.HtmlElement:
+	def element( response: WebArchive | Response | String ) -> lxml.html.HtmlElement:
 
-		if isinstance( response, ResponseInfo ):
+		if isinstance( response, WebArchive ):
 			content = response.content.content.decode( "utf-8" )
-		elif isinstance( response, (Response,CResponse)  ):
+		elif isinstance( response, (Response, CResponse) ):
 			content = response.content.decode( "utf-8" )
 		elif isinstance( response, String ):
 			content = response
@@ -309,7 +332,7 @@ class Htmls( SimpleNamespace ):
 		return lxml.html.fromstring( content )
 
 	@staticmethod
-	def getHtmlStructure( response: ResponseInfo ) -> Result[ PageContent ]:
+	def getHtmlStructure( response: WebArchive ) -> Result[ PageContent ]:
 
 		match response.url.kind:
 			case UrlKinds.YOUTUBE:
@@ -321,7 +344,7 @@ class Htmls( SimpleNamespace ):
 class Processing( SimpleNamespace ):
 
 	@staticmethod
-	def parse_response( info: ResponseInfo ) -> Result[ PageContent ]:
+	def parse_response( info: WebArchive ) -> Result[ PageContent ]:
 
 		match Htmls.mime( info ):
 			case "text/html":
@@ -339,6 +362,10 @@ def default_url_parser() -> EventParser:
 
 def default_response_fetcher() -> WebFetcher:
 	return Fetching.fetch_url
+
+
+def async_response_fetcher() -> AsyncWebFetcher:
+	return Fetching.async_fetch_url
 
 
 def default_response_processer() -> ResponseProcesser:
