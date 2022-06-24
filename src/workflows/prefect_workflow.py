@@ -6,7 +6,7 @@ from prefect import task, Flow
 from prefect.executors import LocalDaskExecutor
 
 from roi_utils import Result
-from roi_web import UrlEvent, UNorm, baseLoadStream, WebArchive, fetchResponseBase, persistResponseBase, baseProcessResponse, basePersistProcessed, PageContent
+from roi_web import UrlEvent, UNorm, baseLoadStream, WebArchive, fetchResponseBase, persistResponseBase, processResponseBase, persistProcessedBase, PageContent
 
 
 @task
@@ -26,12 +26,12 @@ def prefect_persist_response( info: Result[ WebArchive ] ) -> None:
 
 @task
 def prefect_process_response( content: Result[ WebArchive ] ) -> Result[ PageContent ]:
-	return content.flatMap( baseProcessResponse )
+	return content.flatMap( processResponseBase )
 
 
 @task
 def prefect_persist_processed( content: Result[ PageContent ] ) -> None:
-	basePersistProcessed( content )
+	persistProcessedBase( content )
 
 
 with Flow( "Article Extraction" ) as flow:

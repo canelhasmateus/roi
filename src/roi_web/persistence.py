@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import io
 import os
 import pathlib
 import pickle
@@ -95,13 +96,15 @@ def load_stream( filepath = None ) -> Iterable[ TabSeparated ]:
 				yield content
 
 
-def load_archive_async( url: UrlEvent, base_path: pathlib.Path = None ) -> Result[ WebArchive ]:
+async def load_archive_async( url: UrlEvent, base_path: pathlib.Path = None ) -> Result[ WebArchive ]:
 	base_path = base_path or DEFAULT_RAW_PATH
 	file_name = base_path / url.digest()
 	try:
-		with open( str( file_name ), "rb" ) as file:
-			contents = [ archive for archive in ArchiveIterator( file )]
-			return Result.ok( WebArchive( url = url , content =  contents) )
+		async with aiofiles.open( str( file_name) , "rb") as file:
+			content = await file.read()
+			with io.BytesIO( content ) as syncReader:
+				contents = [ archive for archive in ArchiveIterator( syncReader )]
+				return Result.ok( WebArchive( url = url , content =  contents) )
 	except Exception as e:
 		return Result.failure( e )
 
@@ -124,18 +127,18 @@ def save_response( info: WebArchive, base_path: pathlib.Path = None ) -> None:
 	_dump_to( path, info )
 
 
-def save_response_async( info: WebArchive ,base_path: pathlib.Path = None ) -> None:
+async def save_response_async( info: WebArchive ,base_path: pathlib.Path = None ) -> None:
 
 	print( f"{	info.digest() } Starting Persisting Response" )
 	base_path = base_path or DEFAULT_RAW_PATH
 	path = base_path / info.digest()
 	try:
-
-		with open( str( path ), "wb" ) as file:
-			writer = WARCWriter( file, gzip = True)
-			for record in info.content:
-				writer.write_record( record )
-
+		async with aiofiles.open( str( path) , "wb") as file:
+			with io.BytesIO() as syncFile:
+				writer = WARCWriter( syncFile , gzip = True)
+				for record in info.content:
+					writer.write_record( record )
+				await file.write( syncFile.read( ) )
 			print( f"{	info.digest() } Finished Persisting Response" )
 	except Exception as e:
 		print( f"{	info.digest() } error Persisting Response: {str( e )}" )

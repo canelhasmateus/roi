@@ -7,7 +7,7 @@ from apache_beam.options.pipeline_options import PipelineOptions
 from apache_beam.testing.test_pipeline import TestPipeline
 
 from roi_utils import Result
-from roi_web import baseParseUrl, fetchResponseBase, baseProcessResponse, basePersistProcessed, persistResponseBase, UrlEvent, WebArchive
+from roi_web import baseParseUrl, fetchResponseBase, processResponseBase, persistProcessedBase, persistResponseBase, UrlEvent, WebArchive
 
 
 class WebFetcher( DoFn ):

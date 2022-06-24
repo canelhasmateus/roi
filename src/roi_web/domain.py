@@ -90,9 +90,24 @@ class PageContent:
 
 
 @dataclass
+class NetworkArchive:
+	host: String
+	request_headers: Mapping
+	request_method: String
+	request_real_url: String
+	request_url: String
+	response_charset: String
+	response_content: bytes
+	response_content_type: String
+	response_headers: Mapping
+	response_real_url: String
+	response_status : int
+	response_url: String
+
+@dataclass
 class WebArchive:
 	url: UrlEvent[ ... ]
-	content: Iterable[ ArcWarcRecord ]
+	content: NetworkArchive
 
 	def digest( self ) -> String:
 		return hashlib.md5( self.url.raw.encode() ).digest().hex()

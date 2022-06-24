@@ -66,40 +66,30 @@ class Events( SimpleNamespace ):
 
 class Fetching( SimpleNamespace ):
 	_USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/83.0.4103.116 Safari/537.36'
-	session = None
-	...
 
 	@staticmethod
-	def fetch_url( url: UrlEvent[ ... ], headers: Mapping[ String, String ] = None ) -> WebArchive:
-		headers = headers or { 'User-Agent': Fetching._USER_AGENT }
-		with capture_http() as writer:
-			try:
-				requests.get( url.raw, headers = headers )
-			except Exception as e:
-				print( e )
+	async def async_fetch_url( session: ClientSession, url: UrlEvent ):
+		async with session.get( url.raw, headers = { "User-Agent": Fetching._USER_AGENT } ) as resp:
+			# TODO  23/06/2022 checar serialibilidade dos headers.
+			response = NetworkArchive( response_status = resp.status,
+			                           response_charset = resp.charset,
+			                           response_content = await resp.read(),
+			                           response_content_type = resp.content_type,
+			                           response_headers = resp.headers,
+			                           response_url = str( resp.url ),
+			                           response_real_url = str( resp.real_url ),
+			                           host = resp.host,
+			                           request_headers = resp.request_info.headers,
+			                           request_method = resp.request_info.method,
+			                           request_url = str( resp.request_info.url ),
+			                           request_real_url = str( resp.request_info.real_url ),
+			                           )
 
-		records = [ record for record in ArchiveIterator( writer.get_stream() ) ]
-		return WebArchive( url = url,
-		                   content = records )
+			return WebArchive( url = url, content = response )
 
-	@staticmethod
-	async def async_fetch_url( session : ClientSession, url: UrlEvent ):
-		async with session.get( url.raw ) as resp:
-			writer = BufferWARCWriter()
-			content = await resp.read()
-			headers = StatusAndHeaders( f"{resp.status} {resp.reason}",
-			                            headers = (resp.headers.items()),
-			                            protocol = "HTTP/1.1" )
-
-			record = writer.create_warc_record( url.raw, 'response',
-			                                    payload = io.BytesIO( content ),
-			                                    http_headers = headers )
-
-			return WebArchive( url = url, content = [ record ] )
 
 class Youtube( SimpleNamespace ):
 	_RE_FIND_DURATION = re.compile( r"PT(\d+)M(\d+)S" )
-
 
 	@staticmethod
 	def title( html: etree.HTML ) -> String | None:
@@ -204,7 +194,7 @@ class Htmls( SimpleNamespace ):
 
 	@staticmethod
 	def mime( response: WebArchive ) -> MimeType:
-		headers: WebHeader = response.content.headers
+		readers: WebHeader = response.content.headers
 		content_type = headers.get( "Content-Type", "" )
 		match content_type.split( ";" ):
 			case [ mime, _ ]:
@@ -322,7 +312,7 @@ class Htmls( SimpleNamespace ):
 
 		if isinstance( response, WebArchive ):
 			content = response.content.content.decode( "utf-8" )
-		elif isinstance( response, (Response, CResponse) ):
+		elif isinstance( response, (Response, NetworkArchive) ):
 			content = response.content.decode( "utf-8" )
 		elif isinstance( response, String ):
 			content = response
@@ -354,8 +344,20 @@ class Processing( SimpleNamespace ):
 			case other:
 				return Result.failure( Exception( f"Unsupported mime type {other}" ) )
 
+	@staticmethod
+	async def parse_response_async( session: ClientSession, info: WebArchive ) -> Result[ PageContent ]:
+		match Htmls.mime( info ):
+			case "text/html":
+				return Result.ok( info ).flatMap( Htmls.getHtmlStructure )
+			case "application/pdf":
+				return Result.failure( Exception( "PDF not supported for now" ) )
+			case other:
+				return Result.failure( Exception( f"Unsupported mime type {other}" ) )
+
 
 #
+
+
 def default_url_parser() -> EventParser:
 	return Events.parse_url
 
@@ -366,6 +368,10 @@ def default_response_fetcher() -> WebFetcher:
 
 def async_response_fetcher() -> AsyncWebFetcher:
 	return Fetching.async_fetch_url
+
+
+def async_response_processer():
+	return Processing.parse_response_async
 
 
 def default_response_processer() -> ResponseProcesser:
