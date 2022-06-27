@@ -1,12 +1,11 @@
 from __future__ import annotations
 
+import base64
 import enum
 import hashlib
-from dataclasses import dataclass, replace, field
+import json
+from dataclasses import dataclass, replace, field, asdict
 from typing import NewType, TypeAlias, Iterable, Generic, TypeVar, Mapping, List, Protocol
-
-from requests import Response
-from warcio.recordloader import ArcWarcRecord
 
 from roi_utils import Result
 
@@ -70,7 +69,6 @@ class UrlEvent( Generic[ S ] ):
 
 @dataclass()
 class PageContent:
-	url: UrlEvent
 	text: String
 	title: String | None = None
 	duration: Second | None = None
@@ -88,6 +86,17 @@ class PageContent:
 	def digest( self ) -> String:
 		return hashlib.md5( self.url.raw.encode() ).digest().hex()
 
+@dataclass
+class ResponseEnrichment:
+	url: UrlEvent
+	transcriptions: Iterable[ String ]
+
+	def digest( self ) -> String:
+		return self.url.digest()
+
+	def json( self ) -> String:
+		return json.dumps( asdict( self ) , indent = 2 )
+
 
 @dataclass
 class NetworkArchive:
@@ -101,8 +110,9 @@ class NetworkArchive:
 	response_content_type: String
 	response_headers: Mapping
 	response_real_url: String
-	response_status : int
+	response_status: int
 	response_url: String
+
 
 @dataclass
 class WebArchive:
@@ -115,10 +125,18 @@ class WebArchive:
 	def update( self, **kwargs ) -> WebArchive:
 		return replace( self, **kwargs )
 
-	@classmethod
-	def from_dict( cls, res ) -> WebArchive:
-		return  WebArchive( **res )
+	def json( self ):
+		thisdict = asdict( self )
+		thisdict[ "content" ][ "response_content" ] = base64.b64encode( thisdict[ "content" ][ "response_content" ] ).decode( "ascii" )
+		return json.dumps( thisdict , indent = 2 )
 
+	@classmethod
+	def from_json( cls, content ):
+		thisdict = json.loads( content )
+		thisdict[ "content" ][ "response_content" ] = base64.b64decode( thisdict[ "content" ][ "response_content" ] )
+		thisdict[ "content" ] = NetworkArchive( **thisdict[ "content" ] )
+		thisdict[ "url" ] = UrlEvent( **thisdict[ "url" ] )
+		return cls( **thisdict )
 
 
 #
@@ -146,5 +164,10 @@ class ResponseProcesser( Protocol ):
 
 
 class Digestable( Protocol ):
+
 	def digest( self ) -> String:
 		...
+
+	def json( self ) -> String:
+		...
+

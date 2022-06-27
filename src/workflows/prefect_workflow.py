@@ -6,12 +6,12 @@ from prefect import task, Flow
 from prefect.executors import LocalDaskExecutor
 
 from roi_utils import Result
-from roi_web import UrlEvent, UNorm, baseLoadStream, WebArchive, fetchResponseBase, persistResponseBase, processResponseBase, persistProcessedBase, PageContent
+from roi_web import UrlEvent, UNorm, loadEvents, WebArchive, fetchResponseBase, persistResponseBase, processResponseBase, persistProcessedBase, PageContent
 
 
 @task
 def prefect_load_stream() -> Iterable[ UrlEvent[ UNorm ] ]:
-	return [ i for i in baseLoadStream() ]
+	return [ i for i in loadEvents() ]
 
 
 @task
