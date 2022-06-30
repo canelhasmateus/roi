@@ -138,7 +138,7 @@ class Youtube( SimpleNamespace ):
 
 	@staticmethod
 	def structure( response: WebArchive ) -> PageContent:
-		element = Htmls.element( response )
+		element = Htmls.htmlElement( response )
 
 		duration = Youtube.duration( element )
 		if not duration:
@@ -200,7 +200,7 @@ class Htmls( SimpleNamespace ):
 		return Htmls.first( ogDescr, twitterDescr, itemProp, metaDescr,
 		                    articleParagraph, anyParagraph )
 	@staticmethod
-	def getAudio( html: etree.HTML) -> Iterable[ ]:
+	def getAudio( html: etree.HTML) -> Iterable[ etree.HTML]:
 		...
 
 	@staticmethod
@@ -216,7 +216,7 @@ class Htmls( SimpleNamespace ):
 
 	@staticmethod
 	def structure( response: WebArchive ) -> PageContent:
-		html_element = Htmls.element( response.content )
+		html_element = Htmls.htmlElement( response.content )
 		result = trafilatura.bare_extraction( filecontent = html_element,
 		                                      include_comments = False,
 		                                      include_images = True,
@@ -245,7 +245,7 @@ class Htmls( SimpleNamespace ):
 		                    )
 
 	@staticmethod
-	def element( response: WebArchive | NetworkArchive | String ) -> lxml.html.HtmlElement:
+	def htmlElement( response: WebArchive | NetworkArchive | String ) -> lxml.html.HtmlElement:
 		if isinstance( response, WebArchive ):
 			charset = response.content.response_charset or "utf-8"
 			content = response.content.response_content.decode( charset )
@@ -258,3 +258,24 @@ class Htmls( SimpleNamespace ):
 			content = ""
 
 		return lxml.html.fromstring( content )
+
+	@staticmethod
+	def xmlElement( response: WebArchive | NetworkArchive | String ) -> lxml.etree.Element:
+		if isinstance( response, WebArchive ):
+			charset = response.content.response_charset or "utf-8"
+			content = response.content.response_content.decode( charset )
+		elif isinstance( response, NetworkArchive ):
+			charset = response.response_charset or "utf-8"
+			content = response.response_content.decode( charset )
+		elif isinstance( response, String ):
+			content = response
+
+		else:
+			content = ""
+
+		return lxml.etree.fromstring( content )
+
+	@staticmethod
+	def youtubeTranscript( response : NetworkArchive ) -> String:
+
+		return " ".join( i.text for i in lxml.etree.XML( response.response_content ) )

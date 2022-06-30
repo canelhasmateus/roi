@@ -86,6 +86,7 @@ class PageContent:
 	def digest( self ) -> String:
 		return hashlib.md5( self.url.raw.encode() ).digest().hex()
 
+
 @dataclass
 class ResponseEnrichment:
 	url: UrlEvent
@@ -95,7 +96,13 @@ class ResponseEnrichment:
 		return self.url.digest()
 
 	def json( self ) -> String:
-		return json.dumps( asdict( self ) , indent = 2 )
+		return json.dumps( asdict( self ), indent = 2 )
+
+	@classmethod
+	def from_json( cls, json_string: bytes ) -> ResponseEnrichment:
+		adict = json.loads( json_string.decode("utf-8") )
+		adict[ "url" ] = UrlEvent( **adict[ "url" ] )
+		return cls( **adict )
 
 
 @dataclass
@@ -128,7 +135,7 @@ class WebArchive:
 	def json( self ):
 		thisdict = asdict( self )
 		thisdict[ "content" ][ "response_content" ] = base64.b64encode( thisdict[ "content" ][ "response_content" ] ).decode( "ascii" )
-		return json.dumps( thisdict , indent = 2 )
+		return json.dumps( thisdict, indent = 2 )
 
 	@classmethod
 	def from_json( cls, content ):
@@ -170,4 +177,3 @@ class Digestable( Protocol ):
 
 	def json( self ) -> String:
 		...
-
