@@ -69,6 +69,7 @@ class UrlEvent( Generic[ S ] ):
 
 @dataclass()
 class PageContent:
+	url: String
 	text: String
 	title: String | None = None
 	duration: Second | None = None
@@ -84,13 +85,22 @@ class PageContent:
 		return replace( self, **kwargs )
 
 	def digest( self ) -> String:
-		return hashlib.md5( self.url.raw.encode() ).digest().hex()
+		return hashlib.md5( self.url.encode() ).digest().hex()
 
+	def json( self ) -> String:
+		return json.dumps( asdict( self ), indent = 2 )
+
+	@classmethod
+	def from_json( cls, json_string: bytes ) -> PageContent:
+		adict = json.loads( json_string.decode("utf-8") )
+		return cls( **adict )
 
 @dataclass
 class ResponseEnrichment:
 	url: UrlEvent
 	transcriptions: Iterable[ String ]
+
+
 
 	def digest( self ) -> String:
 		return self.url.digest()
@@ -103,6 +113,11 @@ class ResponseEnrichment:
 		adict = json.loads( json_string.decode("utf-8") )
 		adict[ "url" ] = UrlEvent( **adict[ "url" ] )
 		return cls( **adict )
+
+
+	@property
+	def kind( self ):
+		return self.url.kind
 
 
 @dataclass
@@ -126,6 +141,8 @@ class WebArchive:
 	url: UrlEvent[ ... ]
 	content: NetworkArchive
 
+
+
 	def digest( self ) -> String:
 		return hashlib.md5( self.url.raw.encode() ).digest().hex()
 
@@ -145,7 +162,9 @@ class WebArchive:
 		thisdict[ "url" ] = UrlEvent( **thisdict[ "url" ] )
 		return cls( **thisdict )
 
-
+	@property
+	def kind( self ) -> UrlKinds:
+		return self.url.kind
 #
 
 class PageException( Exception ):

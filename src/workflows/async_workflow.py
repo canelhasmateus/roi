@@ -13,5 +13,17 @@ async def main():
 
 
 if __name__ == "__main__":
+	import logging
+
+	handler = logging.StreamHandler()
+	handler.setLevel( logging.INFO)
+	formatter = logging.Formatter("%(digest)s\t%(kind)s\t\t%(message)s")
+	handler.setFormatter( formatter)
+	myLogger = logging.getLogger("Roi")
+	myLogger.addHandler( handler)
+	myLogger.setLevel( logging.INFO)
+
+
+
 	asyncio.set_event_loop_policy( asyncio.WindowsSelectorEventLoopPolicy() )
 	asyncio.run( main() )

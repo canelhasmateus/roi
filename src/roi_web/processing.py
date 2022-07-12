@@ -7,8 +7,9 @@ from typing import Iterable, ClassVar
 from aiohttp import ClientSession
 
 from roi_utils import Result, save_async, load_async
+from roi_utils.logging import ExecutionContext
 from .domain import WebArchive, UrlEvent, PageContent, NetworkArchive, ResponseEnrichment, UrlKinds, String
-from .parsing import EventParsing, Htmls
+from .parsing import EventParsing, HTML, PDF, Youtube
 
 WEB_STREAM_FILEPATH = os.environ.get( "GNOSIS_WEB_STREAM", "C:/Users/Mateus/OneDrive/gnosis/limni/lists/stream/articles.tsv" )
 DEFAULT_STREAM_PATH = pathlib.Path( WEB_STREAM_FILEPATH )
@@ -28,11 +29,11 @@ class Fetcher:
 	def __init__( self, session: ClientSession = None ):
 		self.session = session or ClientSession()
 
-	async def fetch( self, url: String, headers = None , params = None) -> NetworkArchive:
+	async def fetch( self, url: String, headers = None, params = None ) -> NetworkArchive:
 		headers = headers or { "User-Agent": self._USER_AGENT }
-		params = params or {  }
+		params = params or { }
 
-		async with self.session.get( url, headers = headers , params = params) as resp:
+		async with self.session.get( url, headers = headers, params = params ) as resp:
 			response = NetworkArchive( response_status = resp.status,
 			                           response_charset = resp.charset,
 			                           response_content = await resp.read(),
@@ -59,89 +60,97 @@ class Archiver:
 		self.semaphore = semaphore or asyncio.Semaphore( 1000 )
 
 	async def _fetchArchive( self, url: UrlEvent ) -> WebArchive:
-		response = await self.fetcher.fetch( url.raw )
-		return WebArchive( url = url, content = response )
-
-	async def _loadArchive( self, url: UrlEvent ) -> WebArchive:
-		file_name = self.DEFAULT_PATH / url.digest()
-		async with self.semaphore:
-			cached = await load_async( file_name )
-		return cached.map( WebArchive.from_json ).expect()
+		with ExecutionContext( "Fetching WebArchive",
+		                       extra = { "digest": url.digest(), "kind": url.kind } ):
+			response = await self.fetcher.fetch( url.raw )
+			return WebArchive( url = url, content = response )
 
 	async def loadArchive( self, url: UrlEvent ) -> WebArchive:
+
 		try:
-			archive = await self._loadArchive( url )
-			print( f"Loaded {archive.url}" )
-			return archive
-		except Exception as e:
-			print( f"{url.digest()}: No cache found - fetching Response after {str( e )}" )
+			async with self.semaphore:
+				with ExecutionContext( "Loading cached web archive",
+				                       extra = { "digest": url.digest(), "kind": url.kind } ):
+					file_name = self.DEFAULT_PATH / url.digest()
+					cached = await load_async( file_name )
+					cached = cached.map( WebArchive.from_json ).expect()
+					status = cached.content.response_status
+					if status < 200 and 299 < status:
+						file_name.unlink()
+						raise Exception( "Unsucessful response" )
+
+					return cached
+
+		except:
 			return await self._fetchArchive( url )
 
 	async def persistArchive( self, archive: WebArchive ) -> None:
-		file_name = self.DEFAULT_PATH / archive.digest()
 		async with self.semaphore:
-			await save_async( archive, file_name )
+			with ExecutionContext( "Persisting Archive", raises = False,
+			                       extra = { "kind": archive.kind, "digest": archive.digest() } ):
+				file_name = self.DEFAULT_PATH / archive.digest()
+				await save_async( archive, file_name )
 
 
 class Enricher:
 	basepath: ClassVar = "C:/Users/Mateus/Desktop/files"
 	DEFAULT_PATH: ClassVar = pathlib.Path( basepath ) / "enriched"
-	pattern = re.compile( r"(?<=v=)([a-zA-Z0-9]+)(?=\b|&)" )
+	pattern = re.compile( r"(?<=v=)([a-zA-Z0-9_]+)(?=\b|&)" )
+
 	def __init__( self, fetcher: Fetcher, semaphore = None ):
 		self.fetcher = fetcher
 		self.semaphore = semaphore or asyncio.Semaphore( 1000 )
 
-	async def _fetch_youtube( self, archive: WebArchive ) -> Result[ ResponseEnrichment ]:
+	async def _fetch_youtube( self, archive: WebArchive ) -> ResponseEnrichment:
 		videoId = self.pattern.search( archive.url.raw )
 		if not videoId:
-			return Result.failure( Exception( f"{archive.url.raw} is not a youtube video" ) )
+			raise Exception( f"{archive.url.raw} is not a youtube video" )
+
+		with ExecutionContext( "Calling youtubetranscript",
+		                       extra = { "kind": archive.kind, "digest": archive.digest() } ):
+			content = await self.fetcher.fetch( "https://youtubetranscript.com", params = { "server_vid": videoId.group( 0 ) } )
+			enrich = ResponseEnrichment( url = archive.url, transcriptions = [ HTML.youtubeTranscript( content ) ] )
+			return enrich
+
+	async def enrichArchive( self, archive: WebArchive ) -> ResponseEnrichment | None:
 
 		try:
+			with ExecutionContext( "Loading Cached Enrichment",
+			                       extra = { "kind": archive.kind, "digest": archive.digest() } ):
 
-			content = await self.fetcher.fetch( "https://youtubetranscript.com", params = { "server_vid": videoId.group(0) }  )
+				filename = self.DEFAULT_PATH / archive.digest()
+				content = await load_async( filename )
+				return content.map( ResponseEnrichment.from_json ).expect()
 
-			enrich = ResponseEnrichment( url = archive.url, transcriptions = [ Htmls.youtubeTranscript(content) ] )
-			return Result.ok( enrich )
-		except Exception as e:
-			return Result.failure( e )
-
-		# archive.url
-			# response = requests.get( ")
-		# ...
-	async def _fetch_html( self, archive: WebArchive ) -> Result[ ResponseEnrichment ]:
-		# for image in Htmls.getImage( ar):
-		# 	...
-		...
-
-	async def enrichArchive( self , archive : WebArchive) -> ResponseEnrichment:
-
-		filename = self.DEFAULT_PATH / archive.digest()
-		content = await load_async( filename )
-		try:
-			return content.map( ResponseEnrichment.from_json ).expect()
-		except Exception as e:
-			print( f"{archive.digest()}: No cache found - fetching Response after {str( e )}" )
+		except:
 			return await self._fetch_enrichment( archive )
 
+	async def _fetch_enrichment( self, archive: WebArchive ) -> ResponseEnrichment:
 
-	async def _fetch_enrichment( self, archive: WebArchive ) -> ResponseEnrichment :
+		with ExecutionContext( "Fetching new Enrichment",
+		                       extra = { "kind": archive.kind, "digest": archive.digest() } ):
 
-		match archive.url.kind:
-			case UrlKinds.YOUTUBE:
-				return await self._fetch_youtube( archive )
-			case _:
-				return ResponseEnrichment( url = archive.url , transcriptions = [])
+			match archive.url.kind:
 
-	async def persistEnrich( self, enrichment: Result[ResponseEnrichment]  ) -> None:
-		enrichment= enrichment.expect()
-		file_name = self.DEFAULT_PATH / enrichment.digest()
-		async with self.semaphore:
-			await save_async( enrichment, file_name )
+				case UrlKinds.YOUTUBE:
+					return await self._fetch_youtube( archive )
+				case _:
+					raise Exception( "No enrichment is known for this archive." )
 
+	async def persistEnrich( self, enrichment: ResponseEnrichment | None ) -> None:
 
+		if enrichment:
+			file_name = self.DEFAULT_PATH / enrichment.digest()
+			async with self.semaphore:
+				with ExecutionContext( "Persisting Enrichment", raises = False,
+				                       extra = { "kind": enrichment.kind, "digest": enrichment.digest() } ):
+					await save_async( enrichment, file_name )
 
 
 class Processer:
+	basepath: ClassVar = "C:/Users/Mateus/Desktop/files"
+	DEFAULT_PATH: ClassVar = pathlib.Path( basepath ) / "processed"
+
 	def __init__( self, session: ClientSession ):
 		self.session = session
 		self.semaphore = asyncio.Semaphore( 1000 )
@@ -154,29 +163,41 @@ class Processer:
 		try:
 			url = url.expect()
 			archive = await self.archiver.loadArchive( url )
+			enrichment = await self.enricher.enrichArchive( archive )
+			processed = await self._doProcess( archive, enrichment )
 
-			persistArchive = self.archiver.persistArchive( archive )
-			enrichCoro = self.enricher.enrichArchive( archive )
-			res = await asyncio.gather( persistArchive, enrichCoro )
-			_, enrichment = res
-			persistEnrichment = self.enricher.persistEnrich( enrichment )
-			doProcess = self._doProcess( archive, enrichment )
-			_, processed = await asyncio.gather( persistEnrichment, doProcess )
+			await asyncio.gather(
+					self.archiver.persistArchive( archive ),
+					self.enricher.persistEnrich( enrichment ),
+					self.persistProcessed( processed ) )
 
 			return processed
 
 		except Exception as e:
-			print( e )
+			...
 
-	async def _doProcess( self, archive: WebArchive, enrichment: ResponseEnrichment ) -> PageContent:
-		...
+	async def _doProcess( self, archive: WebArchive, enrichment: ResponseEnrichment | None ) -> PageContent:
+		with ExecutionContext( "Processing archive",
+		                       extra = { "kind": enrichment.kind, "digest": enrichment.digest() } ):
 
-# 		match info.content.response_content_type:
-# 			case "text/html":
-# 				return Result.ok( info ).flatMap( Htmls.getHtmlStructure )
-# 			case "application/pdf":
-# 				return Result.failure( Exception( "PDF not supported for now" ) )
-# 			case other:
-# 				return Result.failure( Exception( f"Unsupported mime type {other}" ) )
-#
-# #..
+			match archive.url.kind, archive.content.response_content_type, enrichment:
+				case UrlKinds.YOUTUBE, _, valid:
+					structure = Youtube.structure( archive )
+					return structure.update(
+							text = " ".join( valid.transcriptions ) )
+				case _, "text/html", _:
+					return HTML.structure( archive )
+				case _, "application/pdf", _:
+					return PDF.structure( archive )
+
+				case _:
+					raise Exception( "Unsupported Mime Type" )
+
+	async def persistProcessed( self, processed: PageContent ):
+		async with self.semaphore:
+			with ExecutionContext( "Persist Processed",
+			                       extra = { "digest": processed.digest(), "kind": "Unknown" } ):
+				try:
+					await save_async( processed, path = self.DEFAULT_PATH / processed.digest() )
+				except Exception as e:
+					print()

@@ -1,5 +1,9 @@
 from __future__ import annotations
 
+import math
+
+from fitz import fitz
+
 _a = None
 
 import itertools
@@ -14,7 +18,9 @@ import trafilatura.spider
 from lxml import etree
 
 from .domain import *
+from logging import getLogger
 
+logger = getLogger("Parsing")
 
 class EventParsing( SimpleNamespace ):
 	_RE_REMOVE_UTM = re.compile( r"&?utm_(source|medium|campaign|term|content)=[^&]*&?" )
@@ -50,7 +56,7 @@ class EventParsing( SimpleNamespace ):
 		                 query = parsed.query or "" )
 
 		if not good.hostname:
-			print( f"{good.raw} hostname bug" )
+
 			return Result.failure( Exception( "No hostname found" ) )
 
 		return Result.ok( good ).map( EventParsing._remove_params )
@@ -61,14 +67,14 @@ class Youtube( SimpleNamespace ):
 
 	@staticmethod
 	def title( html: etree.HTML ) -> String | None:
-		title = Htmls.toAttrib( "content", html.xpath( "//meta[@itemprop='name']" ) )
-		title = Htmls.first( title )
+		title = HTML.toAttrib( "content", html.xpath( "//meta[@itemprop='name']" ) )
+		title = HTML.first( title )
 		return title
 
 	@staticmethod
 	def duration( html: etree.HTML ) -> Second | None:
-		from_itemprop = Htmls.toAttrib( "content", html.xpath( "//meta[@itemprop='duration']" ) )
-		duration = Htmls.first( from_itemprop )
+		from_itemprop = HTML.toAttrib( "content", html.xpath( "//meta[@itemprop='duration']" ) )
+		duration = HTML.first( from_itemprop )
 		match = Youtube._RE_FIND_DURATION.match( duration )
 		if not match:
 			return None
@@ -78,27 +84,27 @@ class Youtube( SimpleNamespace ):
 
 	@staticmethod
 	def date( element: lxml.html.HtmlElement ) -> IsoTime:
-		date = Htmls.toAttrib( "content", element.xpath( "//meta[@itemprop='datePublished']" ) )
-		date = Htmls.first( date )
+		date = HTML.toAttrib( "content", element.xpath( "//meta[@itemprop='datePublished']" ) )
+		date = HTML.first( date )
 		if date:
 			...
 		return date
 
 	@staticmethod
 	def image( element: lxml.html.HtmlElement ) -> String | None:
-		url = Htmls.toAttrib( "href", element.xpath( "//link[@itemprop='thumbnailUrl']" ) )
-		url = Htmls.first( url )
+		url = HTML.toAttrib( "href", element.xpath( "//link[@itemprop='thumbnailUrl']" ) )
+		url = HTML.first( url )
 		if url:
 			...
 		return url
 
 	@staticmethod
 	def tags( element: lxml.html.HtmlElement ) -> Iterable[ String ] | None:
-		from_itemprop = Htmls.toAttrib( "content", element.xpath( "//meta[@name='keywords']" ) )
-		tags = Htmls.first( from_itemprop )
+		from_itemprop = HTML.toAttrib( "content", element.xpath( "//meta[@name='keywords']" ) )
+		tags = HTML.first( from_itemprop )
 		if tags:
 			tags = tags.split( "," )
-			tags = { content.strip() for content in tags }
+			tags = [ content.strip() for content in tags ]
 		return tags
 
 	@staticmethod
@@ -108,8 +114,8 @@ class Youtube( SimpleNamespace ):
 
 	@staticmethod
 	def categories( element: lxml.html.HtmlElement ) -> Iterable[ String ]:
-		genres = Htmls.toAttrib( "content", element.xpath( "//meta[@itemprop='genre']" ) )
-		genres = Htmls.first( genres )
+		genres = HTML.toAttrib( "content", element.xpath( "//meta[@itemprop='genre']" ) )
+		genres = HTML.first( genres )
 		if genres:
 			genres = genres.split( "," )
 
@@ -121,29 +127,20 @@ class Youtube( SimpleNamespace ):
 
 	@staticmethod
 	def author( element: lxml.html.HtmlElement ) -> String:
-		author = Htmls.toAttrib( "href", element.xpath( "//span[@itemprop='author']/link[@itemprop='url']" ) )
-		author = Htmls.first( author )
+		author = HTML.toAttrib( "href", element.xpath( "//span[@itemprop='author']/link[@itemprop='url']" ) )
+		author = HTML.first( author )
 		return author
 
 	@staticmethod
 	def text( element: lxml.html.HtmlElement ) -> String:
-		if True:
-			return ""
-
-		root = lxml.etree.fromstring( response.text )
-		text = " ".join( root.itertext() )
-		if not response.ok or text == 'Error: transcripts disabled for that video':
-			print( f"Transcripts disabled for that video with id {video_id}" )
-		return text
+		return ""
 
 	@staticmethod
 	def structure( response: WebArchive ) -> PageContent:
-		element = Htmls.htmlElement( response )
-
+		element = HTML.htmlElement( response )
 		duration = Youtube.duration( element )
-		if not duration:
-			print( "No Duration" )
-		return PageContent( url = response.url,
+
+		return PageContent( url = response.url.raw,
 		                    text = Youtube.text( element ),
 		                    title = Youtube.title( element ),
 		                    duration = duration,
@@ -156,7 +153,7 @@ class Youtube( SimpleNamespace ):
 		                    image = Youtube.image( element ) )
 
 
-class Htmls( SimpleNamespace ):
+class HTML( SimpleNamespace ):
 
 	@staticmethod
 	def toText( e ):
@@ -171,52 +168,53 @@ class Htmls( SimpleNamespace ):
 		for i in itertools.chain.from_iterable( args ):
 			if i:
 				return i
-		return ""
+		return None
 
 	@staticmethod
 	def getTitle( html: etree.HTML ) -> String:
 
-		articleTitle = Htmls.toText( html.xpath( "//article/h1" ) )
-		itemProp = Htmls.toAttrib( "content", html.xpath( "//meta[@itemprop='name']" ) )
-		ogTitle = Htmls.toAttrib( "content", html.xpath( "//meta[@name='og:title']" ) )
-		titleFromAnywhere = Htmls.toText( html.xpath( "//title" ) )
-		titleFromHead = Htmls.toText( html.xpath( "//head/title" ) )
-		twitterTitle = Htmls.toAttrib( "content", html.xpath( "//meta[@name='twitter:title']" ) )
+		articleTitle = HTML.toText( html.xpath( "//article/h1" ) )
+		itemProp = HTML.toAttrib( "content", html.xpath( "//meta[@itemprop='name']" ) )
+		ogTitle = HTML.toAttrib( "content", html.xpath( "//meta[@name='og:title']" ) )
+		titleFromAnywhere = HTML.toText( html.xpath( "//title" ) )
+		titleFromHead = HTML.toText( html.xpath( "//head/title" ) )
+		twitterTitle = HTML.toAttrib( "content", html.xpath( "//meta[@name='twitter:title']" ) )
 
-		return Htmls.first(
+		return HTML.first(
 				ogTitle, twitterTitle, itemProp,
 				articleTitle, titleFromHead, titleFromAnywhere )
 
 	@staticmethod
 	def getDescription( html: etree.HTML ) -> String:
 
-		anyParagraph = Htmls.toText( html.xpath( "//p" ) )
-		articleParagraph = Htmls.toText( html.xpath( "//article//p" ) )
-		itemProp = Htmls.toAttrib( "content", html.xpath( "//meta[@itemprop='description']" ) )
-		metaDescr = Htmls.toAttrib( "content", html.xpath( "//meta[@name='description']" ) )
-		ogDescr = Htmls.toAttrib( "content", html.xpath( "//meta[@name='og:description']" ) )
-		twitterDescr = Htmls.toAttrib( "content", html.xpath( "//meta[@name='twitter:description']" ) )
+		anyParagraph = HTML.toText( html.xpath( "//p" ) )
+		articleParagraph = HTML.toText( html.xpath( "//article//p" ) )
+		itemProp = HTML.toAttrib( "content", html.xpath( "//meta[@itemprop='description']" ) )
+		metaDescr = HTML.toAttrib( "content", html.xpath( "//meta[@name='description']" ) )
+		ogDescr = HTML.toAttrib( "content", html.xpath( "//meta[@name='og:description']" ) )
+		twitterDescr = HTML.toAttrib( "content", html.xpath( "//meta[@name='twitter:description']" ) )
 
-		return Htmls.first( ogDescr, twitterDescr, itemProp, metaDescr,
-		                    articleParagraph, anyParagraph )
+		return HTML.first( ogDescr, twitterDescr, itemProp, metaDescr,
+		                   articleParagraph, anyParagraph )
+
 	@staticmethod
-	def getAudio( html: etree.HTML) -> Iterable[ etree.HTML]:
+	def getAudio( html: etree.HTML ) -> Iterable[ etree.HTML ]:
 		...
 
 	@staticmethod
 	def getImage( html: etree.HTML ) -> String:
 
-		anyImage = Htmls.toAttrib( "src", html.xpath( "//img" ) )
-		headIcon = Htmls.toAttrib( "href", html.xpath( "//head/link[@rel='icon']" ) )
-		itemProp = Htmls.toAttrib( "content", html.xpath( "//meta[@itemprop='image']" ) )
-		ogImage = Htmls.toAttrib( "content", html.xpath( "//meta[@property='og:image']" ) )
-		twitterImage = Htmls.toAttrib( "content", html.xpath( "//meta[@name='twitter:image']" ) )
+		anyImage = HTML.toAttrib( "src", html.xpath( "//img" ) )
+		headIcon = HTML.toAttrib( "href", html.xpath( "//head/link[@rel='icon']" ) )
+		itemProp = HTML.toAttrib( "content", html.xpath( "//meta[@itemprop='image']" ) )
+		ogImage = HTML.toAttrib( "content", html.xpath( "//meta[@property='og:image']" ) )
+		twitterImage = HTML.toAttrib( "content", html.xpath( "//meta[@name='twitter:image']" ) )
 
-		return Htmls.first( ogImage, twitterImage, itemProp, headIcon, anyImage )
+		return HTML.first( ogImage, twitterImage, itemProp, headIcon, anyImage )
 
 	@staticmethod
 	def structure( response: WebArchive ) -> PageContent:
-		html_element = Htmls.htmlElement( response.content )
+		html_element = HTML.htmlElement( response.content )
 		result = trafilatura.bare_extraction( filecontent = html_element,
 		                                      include_comments = False,
 		                                      include_images = True,
@@ -228,11 +226,14 @@ class Htmls( SimpleNamespace ):
 		title = result.get( "title", None )
 		author = result.get( "author", None )
 		date = result.get( "date", None )
-		categories = result.get( "categories", None )
-		tags = result.get( "tags", None )
-		image = Htmls.getImage( html_element )
+		categories = [ i for i in result.get( "categories", [] )]
+		tags = [ i for i in result.get( "tags", [] ) ]
+		image = HTML.getImage( html_element )
+
 		# TODO  24/06/2022 neighbors
-		return PageContent( url = response.url,
+		neighbors = re.findall( "(?<=]\()(.+?)(?=\))", text )
+
+		return PageContent( url = response.url.raw,
 		                    text = text,
 		                    title = title,
 		                    author = author,
@@ -241,7 +242,8 @@ class Htmls( SimpleNamespace ):
 		                    tags = tags,
 		                    image = image,
 		                    comments = [ ],
-		                    neighbors = [ ]
+		                    neighbors = neighbors,
+		                    duration = math.ceil( len( text ) / 5 / 250 ) * 60
 		                    )
 
 	@staticmethod
@@ -276,6 +278,40 @@ class Htmls( SimpleNamespace ):
 		return lxml.etree.fromstring( content )
 
 	@staticmethod
-	def youtubeTranscript( response : NetworkArchive ) -> String:
+	def youtubeTranscript( response: NetworkArchive ) -> String:
 
 		return " ".join( i.text for i in lxml.etree.XML( response.response_content ) )
+
+
+class PDF( SimpleNamespace ):
+
+	@classmethod
+	def text( cls, doc: fitz.Document ) -> String:
+		page = itertools.chain.from_iterable(
+				map( lambda page: page.get_text( "blocks" ),
+				     doc.pages() )
+		)
+
+		return "\n\n".join( map( lambda x: x[ 4 ], page ) )
+
+	@classmethod
+	def structure( cls, archive: WebArchive ) -> PageContent:
+		doc = fitz.Document( stream = archive.content.response_content )
+
+		text = PDF.text( doc )
+		author = doc.metadata.get( "author" , None)
+		title = doc.metadata.get( "title" , None )
+		keywords = [ i for i in doc.metadata.get( "keywords" , [ ]) ]
+		subject = doc.metadata.get( "subject" )
+		modDate = doc.metadata.get( "modDate" )
+
+		return PageContent(
+				url = archive.url.raw,
+				text = text,
+				title = title,
+				duration = math.ceil( len( text ) / 5 / 250 ) * 60,
+				author = author,
+				date = modDate,
+				tags = keywords,
+				categories = [ subject ]
+		)
