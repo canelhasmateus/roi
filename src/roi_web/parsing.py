@@ -20,7 +20,8 @@ from lxml import etree
 from .domain import *
 from logging import getLogger
 
-logger = getLogger("Parsing")
+logger = getLogger( "Parsing" )
+
 
 class EventParsing( SimpleNamespace ):
 	_RE_REMOVE_UTM = re.compile( r"&?utm_(source|medium|campaign|term|content)=[^&]*&?" )
@@ -56,7 +57,6 @@ class EventParsing( SimpleNamespace ):
 		                 query = parsed.query or "" )
 
 		if not good.hostname:
-
 			return Result.failure( Exception( "No hostname found" ) )
 
 		return Result.ok( good ).map( EventParsing._remove_params )
@@ -216,18 +216,20 @@ class HTML( SimpleNamespace ):
 	def structure( response: WebArchive ) -> PageContent:
 		html_element = HTML.htmlElement( response.content )
 		result = trafilatura.bare_extraction( filecontent = html_element,
-		                                      include_comments = False,
-		                                      include_images = True,
 		                                      include_formatting = True,
 		                                      include_links = True,
+
+		                                      include_comments = False,
+		                                      include_images = False,
+		                                      include_tables = False
 		                                      )
 
 		text = result.get( "text", None )
 		title = result.get( "title", None )
 		author = result.get( "author", None )
 		date = result.get( "date", None )
-		categories = [ i for i in result.get( "categories", [] )]
-		tags = [ i for i in result.get( "tags", [] ) ]
+		categories = [ i for i in result.get( "categories", [ ] ) ]
+		tags = [ i for i in result.get( "tags", [ ] ) ]
 		image = HTML.getImage( html_element )
 
 		# TODO  24/06/2022 neighbors
@@ -240,7 +242,7 @@ class HTML( SimpleNamespace ):
 		                    date = date,
 		                    categories = categories,
 		                    tags = tags,
-		                    image = image,
+		                    image = image if len( image or "" ) <= 1000 else None,
 		                    comments = [ ],
 		                    neighbors = neighbors,
 		                    duration = math.ceil( len( text ) / 5 / 250 ) * 60
@@ -299,9 +301,9 @@ class PDF( SimpleNamespace ):
 		doc = fitz.Document( stream = archive.content.response_content )
 
 		text = PDF.text( doc )
-		author = doc.metadata.get( "author" , None)
-		title = doc.metadata.get( "title" , None )
-		keywords = [ i for i in doc.metadata.get( "keywords" , [ ]) ]
+		author = doc.metadata.get( "author", None )
+		title = doc.metadata.get( "title", None )
+		keywords = [ i for i in doc.metadata.get( "keywords", [ ] ) ]
 		subject = doc.metadata.get( "subject" )
 		modDate = doc.metadata.get( "modDate" )
 
