@@ -2,6 +2,7 @@ import asyncio
 import json
 import queue
 import time
+import traceback
 from typing import Protocol, Mapping
 
 logging_queue = asyncio.Queue()
@@ -27,57 +28,79 @@ class ExecutionContext:
 	yellow = "\x1b[0m\x1b[0;33m"
 	red = "\x1b[0m\x1b[0;31m"
 
-	def __init__( self, operation: str, extra: Mapping = None,
-	              raises = True,
-	              exception_level = "warn" ):
+	def __init__( self, operation: str, *, extra: Mapping = None,
+	              exc_suppress = False,
+	              exc_level = "error" ):
 
 		self.operation = operation
-		self.raises = raises
-		self.exception_level = exception_level
-		self.start = None
+		self.supress_error = exc_suppress
+		self.exception_level = exc_level
+		self.start = time.perf_counter()
 
-		extra = dict( extra ) if extra else { }
+		extra = extra or { }
 		extra = { k: extra[ k ] for k in sorted( extra.keys() ) }
 		self.context = {
-				**extra,
-				"step"     : "START",
+				"step"     : "INIT",
+				"start"    : self.width_value( self.start ),
+				"finish"   : self.width_value( self.start ),
+				"duration" : self.width_string( "" ),
 				"operation": self.operation,
-				"start"    : self.start,
+				**extra,
 		}
 
-	async def __aenter__( self ):
+	def __enter__( self ):
 		self.start = time.perf_counter()
-		self.context[ "start" ] = self.start
+		self.context[ "start" ] = self.width_value( self.start )
 
-		msg = (self.blue +
-		       json.dumps( self.context, separators = (",\t", ":") ) +
-		       self.reset)
-
+		msg = self.as_message( self.blue, self.context )
 		sync_queue.put( ("info", msg) )
 
-	async def __aexit__( self, exc_type, exc_val, exc_tb ):
+	def __exit__( self, exc_type, exc_val, exc_tb ):
 		finish = time.perf_counter()
-		self.context[ "finish" ] = finish
-		self.context[ "duration" ] = round( finish - self.start, 2 )
+		self.context[ "finish" ] = self.width_value( finish )
+		self.context[ "duration" ] = self.width_value( finish - self.start )
 
 		if not exc_val:
 			self.context[ "step" ] = "DONE"
 			level = "info"
 			color = self.green
-
-
+		elif exc_val and self.exception_level == "warn":
+			self.context[ "error" ] = self.as_error( exc_type, exc_val )
+			self.context[ "step" ] = "WARN"
+			level = self.exception_level
+			color = self.yellow
 		else:
+			self.context[ "error" ] = self.as_error( exc_type, exc_val )
+			self.context[ "traceback" ] = self.as_traceback( exc_tb )
 			self.context[ "step" ] = "FAIL"
-			level = "warn" if self.exception_level == "warn" else "error"
-			color = self.yellow if self.exception_level == "warn" else self.red
+			level = self.exception_level
+			color = self.red
 
-			self.context[ level ] = str( exc_type ) + " " + str( exc_val )
-
-		msg = color + json.dumps( self.context, separators = (",\t", ":") ) + self.reset
+		msg = self.as_message( color, self.context )
 		sync_queue.put( (level, msg) )
 
-		if not self.raises:
+		if exc_val and self.supress_error:
 			return True
+
+	@classmethod
+	def as_message( cls, color, mapping ):
+		return color + json.dumps( mapping ) + cls.reset
+
+	@classmethod
+	def width_value( cls, value, width = 6, precision = 2 ):
+		return format( value, f"{width}.{precision}f" )
+
+	@classmethod
+	def width_string( cls, value: str, width = 6 ):
+		return value.ljust( width )
+
+	@classmethod
+	def as_error( cls, exc, val, ):
+		return str( exc ) + " " + str( val )
+
+	@classmethod
+	def as_traceback( cls, tb ):
+		return "\n".join( traceback.format_tb( tb )[ :5 ] )
 
 
 async def asyncLog( logger ):
@@ -85,9 +108,8 @@ async def asyncLog( logger ):
 
 
 def log( logger, this_queue: queue.Queue ):
-	try:
-		while True:
-
+	while True:
+		try:
 			level, msg = this_queue.get( timeout = 10 )
 
 			match level:
@@ -98,5 +120,5 @@ def log( logger, this_queue: queue.Queue ):
 				case 'error':
 					logger.error( msg )
 
-	except Exception as e:
-		print( e )
+		except Exception as e:
+			print( e )

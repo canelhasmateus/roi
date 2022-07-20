@@ -18,9 +18,6 @@ import trafilatura.spider
 from lxml import etree
 
 from .domain import *
-from logging import getLogger
-
-logger = getLogger( "Parsing" )
 
 
 class EventParsing( SimpleNamespace ):
