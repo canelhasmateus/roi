@@ -74,9 +74,9 @@ class Processer:
 			richArchive = await self.getRich( rawArchive )
 			processed = self.getFinal( rawArchive, richArchive )
 
-		# await asyncio.gather( self.saveRaw( rawArchive ),
-		#                       self.saveRich( richArchive ),
-		#                       self.saveFinal( processed ) )
+		await asyncio.gather( self.saveRaw( rawArchive ),
+		                      self.saveRich( richArchive ),
+		                      self.saveFinal( processed ) )
 
 		...
 
