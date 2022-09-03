@@ -25,3 +25,11 @@ async def save_async( obj: Jsonable, path: pathlib.Path ) -> None:
 			await file.write( content )
 		else:
 			raise Exception( "Empty content!" )
+
+def save_sync( obj : Jsonable , path : pathlib.Path) -> None:
+	with open( str( path ), "w" ) as file:
+		content = obj.json()
+		if content:
+			file.write( content )
+		else:
+			raise Exception( "Empty content!" )
