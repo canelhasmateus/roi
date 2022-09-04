@@ -7,83 +7,83 @@ V = TypeVar( "V" )
 
 
 class Result( Generic[ K ] ):
-	__slots__ = ("__value", "__error")
+    __slots__ = ("__value", "__error")
 
-	def __init__( self, value: K = None, error: Exception = None ):
-		self.__value = value
-		self.__error = error
+    def __init__( self, value: K = None, error: Exception = None ):
+        self.__value = value
+        self.__error = error
 
-	def successful( self ) -> bool:
-		if self.__error:
-			return False
-		return True
+    def successful( self ) -> bool:
+        if self.__error:
+            return False
+        return True
 
-	def map( self, fn: Callable[ [ K, ... ], V ], **kwargs ) -> Result[ V ]:
-		# noinspection PyBroadException
-		if not self.successful():
-			return self
+    def map( self, fn: Callable[ [ K, ... ], V ], **kwargs ) -> Result[ V ]:
+        # noinspection PyBroadException
+        if not self.successful():
+            return self
 
-		try:
-			v = fn( self.__value, **kwargs )
-			return Result.ok( v )
-		except Exception as e:
-			return Result.failure( e )
+        try:
+            v = fn( self.__value, **kwargs )
+            return Result.ok( v )
+        except Exception as e:
+            return Result.failure( e )
 
-	def flatMap( self, fn: Callable[ [ K ], Result[ V ] ], **kwargs ) -> Result[ V ]:
-		if not self.successful():
-			return self
-		return fn( self.__value, **kwargs )
+    def flatMap( self, fn: Callable[ [ K ], Result[ V ] ], **kwargs ) -> Result[ V ]:
+        if not self.successful():
+            return self
+        return fn( self.__value, **kwargs )
 
-	@overload
-	def orElse( self, fallback: K ) -> K:
-		...
+    @overload
+    def orElse( self, fallback: K ) -> K:
+        ...
 
-	@overload
-	def orElse( self, fallback: Callable[ [ Exception ], K ] ) -> K:
-		...
+    @overload
+    def orElse( self, fallback: Callable[ [ Exception ], K ] ) -> K:
+        ...
 
-	@overload
-	def orElse( self, fallback: Callable[ [ Exception ], None ] ) -> None:
-		...
+    @overload
+    def orElse( self, fallback: Callable[ [ Exception ], None ] ) -> None:
+        ...
 
-	def orElse( self, fallback ) -> K:
-		if self.successful():
-			return self.__value
+    def orElse( self, fallback ) -> K:
+        if self.successful():
+            return self.__value
 
-		if callable( fallback ):
-			res = fallback( self.__error )
-			return res
+        if callable( fallback ):
+            res = fallback( self.__error )
+            return res
 
-		return fallback
+        return fallback
 
-	def expect( self ) -> K:
-		if self.__error:
-			raise self.__error
-		return self.__value
+    def expect( self ) -> K:
+        if self.__error:
+            raise self.__error
+        return self.__value
 
-	@classmethod
-	def ok( cls, value: K ) -> Result[ K ]:
-		return cls( value = value )
+    @classmethod
+    def ok( cls, value: K ) -> Result[ K ]:
+        return cls( value=value )
 
-	@classmethod
-	def failure( cls, error: Exception ) -> Result[ K ]:
+    @classmethod
+    def failure( cls, error: Exception ) -> Result[ K ]:
 
-		return cls( error = error )
+        return cls( error=error )
 
 
 class Transformation( Protocol[ K, V ] ):
-	def __call__( self, value: K, *args, **kwargs ) -> V:
-		...
+    def __call__( self, value: K, *args, **kwargs ) -> V:
+        ...
 
 
 class Thunk( Protocol[ K, V ] ):
-	def __call__( self ) -> V:
-		...
+    def __call__( self ) -> V:
+        ...
 
 
 class Pull( Protocol[ K, V ] ):
-	async def __call__( self, value: K, *args, **kwargs ) -> V:
-		...
+    async def __call__( self, value: K, *args, **kwargs ) -> V:
+        ...
 
 # Morphism = Transformation | Pull
 # class Resolver( Generic[ K ] ):

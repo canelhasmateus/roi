@@ -33,7 +33,7 @@ async def main():
             f.unlink()
 
     events = loadEvents( seen=seen )
-    batches = batch( 3000 , events )
+    batches = batch( 3000, events )
 
     async with Processer( fetcher=Fetcher() ) as processer:
         with ExecutionContext( "Processing all events" ):
@@ -48,7 +48,6 @@ async def main():
 
 
 if __name__ == "__main__":
-
     logger = logging.getLogger( "Roi" )
     logger.setLevel( logging.INFO )
     handler = logging.StreamHandler()

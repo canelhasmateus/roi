@@ -77,7 +77,7 @@ class Youtube( SimpleNamespace ):
         from_itemprop = HTML.toAttrib( "content", html.xpath( "//meta[@itemprop='duration']" ) )
         duration = HTML.first( from_itemprop )
         if duration:
-            #TODO  03/09/2022
+            # TODO  03/09/2022
             match = Youtube._RE_FIND_DURATION.match( duration )
             minutes = int( match.group( 1 ) )
             seconds = int( match.group( 2 ) )
