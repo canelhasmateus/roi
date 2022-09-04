@@ -1,12 +1,11 @@
 import asyncio
+import json
 import logging
 import threading
 
-import aiohttp
-from aiohttp import ClientTimeout
-
 from roi_utils.logging import ExecutionContext, log, sync_queue
-from roi_web import loadEvents, Processer
+from roi_web import Processer, loadEvents
+from roi_web.processing import Fetcher
 
 
 def batch( n, itr ):
@@ -24,30 +23,39 @@ def batch( n, itr ):
 
 
 async def main():
-    tcp_connector = aiohttp.TCPConnector( verify_ssl=False, limit_per_host=2, limit=50 )
-    timeout = ClientTimeout( total=300 )
-    session = aiohttp.ClientSession( connector=tcp_connector, timeout=timeout )
-    batches = batch( 100, loadEvents() )
+    seen = set()
+    for f in Processer.DEFAULT_PATH.glob( "*" ):
+        try:
+            with open( f, "r" ) as file:
+                payload = json.loads( file.read() )
+                seen.add( payload[ "url" ] )
+        except Exception as e:
+            f.unlink()
 
-    async with Processer( session ) as processer:
+    events = loadEvents( seen=seen )
+    batches = batch( 3000 , events )
+
+    async with Processer( fetcher=Fetcher() ) as processer:
         with ExecutionContext( "Processing all events" ):
             for i, minibatch in enumerate( batches ):
-                with ExecutionContext( f"Processing batch",
-                                       extra={"number": i + 1, "length": len( minibatch )},
-                                       exc_suppress=True ):
+                with ExecutionContext( f"Processing batch", exc_suppress=True,
+                                       extra={"number": i + 1, "length": len( minibatch )} ):
+                    #
+                    #
                     await asyncio.gather( *map( processer.process, minibatch ) )
+
+    logging.finished = True
 
 
 if __name__ == "__main__":
+
     logger = logging.getLogger( "Roi" )
     logger.setLevel( logging.INFO )
     handler = logging.StreamHandler()
     handler.setLevel( logging.INFO )
     logger.addHandler( handler )
+
     logging_thread = threading.Thread( target=log, args=(logger, sync_queue) )
     logging_thread.start()
 
-    # asyncio.set_event_loop_policy( asyncio.WindowsSelectorEventLoopPolicy() )
     asyncio.run( main() )
-
-# logging_thread.join()

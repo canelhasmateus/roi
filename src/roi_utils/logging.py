@@ -7,7 +7,7 @@ from typing import Protocol, Mapping
 
 logging_queue = asyncio.Queue()
 sync_queue = queue.Queue()
-
+finished = False
 
 class Logger( Protocol ):
 
@@ -108,9 +108,11 @@ async def asyncLog( logger ):
 
 
 def log( logger, this_queue: queue.Queue ):
+	i = 0
 	while True:
+
 		try:
-			level, msg = this_queue.get( timeout = 10 )
+			level, msg = this_queue.get( timeout = 1 )
 
 			match level:
 				case 'info':
@@ -121,4 +123,5 @@ def log( logger, this_queue: queue.Queue ):
 					logger.error( msg )
 
 		except Exception as e:
-			print( e )
+			if finished:
+				return

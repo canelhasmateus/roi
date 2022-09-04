@@ -63,6 +63,10 @@ class Youtube( SimpleNamespace ):
     _RE_FIND_DURATION = re.compile( r"PT(\d+)M(\d+)S" )
 
     @staticmethod
+    def transcript( response: NetworkArchive ):
+        return " ".join( i.text for i in lxml.etree.XML( response.response_content ) )
+
+    @staticmethod
     def title( html: etree.HTML ) -> String | None:
         title = HTML.toAttrib( "content", html.xpath( "//meta[@itemprop='name']" ) )
         title = HTML.first( title )
@@ -72,12 +76,12 @@ class Youtube( SimpleNamespace ):
     def duration( html: etree.HTML ) -> Second | None:
         from_itemprop = HTML.toAttrib( "content", html.xpath( "//meta[@itemprop='duration']" ) )
         duration = HTML.first( from_itemprop )
-        match = Youtube._RE_FIND_DURATION.match( duration )
-        if not match:
-            return None
-        minutes = int( match.group( 1 ) )
-        seconds = int( match.group( 2 ) )
-        return minutes * 60 + seconds
+        if duration:
+            #TODO  03/09/2022
+            match = Youtube._RE_FIND_DURATION.match( duration )
+            minutes = int( match.group( 1 ) )
+            seconds = int( match.group( 2 ) )
+            return minutes * 60 + seconds
 
     @staticmethod
     def date( element: lxml.html.HtmlElement ) -> IsoTime:
@@ -206,13 +210,12 @@ class HTML( SimpleNamespace ):
         return HTML.first( ogImage, twitterImage, itemProp, headIcon, anyImage )
 
     @staticmethod
-    def structure( url: String, content: String | NetworkArchive ) -> PageContent:
+    def structure( url: String, content: String | NetworkArchive | bytes ) -> PageContent:
         html_element = HTML.htmlElement( content )
 
         result = trafilatura.bare_extraction( filecontent=html_element,
                                               include_formatting=True,
                                               include_links=True,
-
                                               include_comments=False,
                                               include_images=False,
                                               include_tables=False
@@ -243,19 +246,22 @@ class HTML( SimpleNamespace ):
                             )
 
     @staticmethod
-    def htmlElement( response: WebArchive | NetworkArchive | String ) -> lxml.html.HtmlElement:
+    def htmlElement( response: WebArchive | NetworkArchive | String | bytes ) -> lxml.html.HtmlElement:
         if isinstance( response, WebArchive ):
             charset = response.content.response_charset or "utf-8"
             content = response.content.response_content.decode( charset )
         elif isinstance( response, NetworkArchive ):
             charset = response.response_charset or "utf-8"
             content = response.response_content.decode( charset )
-        elif isinstance( response, String ):
-            content = response
         else:
-            content = ""
+            content = response
 
-        return lxml.html.fromstring( content )
+        try:
+
+            return lxml.html.fromstring( content )
+
+        except Exception as e:
+            print( e )
 
     @staticmethod
     def xmlElement( response: WebArchive | NetworkArchive | String ) -> lxml.etree.Element:
@@ -272,11 +278,6 @@ class HTML( SimpleNamespace ):
             content = ""
 
         return lxml.etree.fromstring( content )
-
-    @staticmethod
-    def youtubeTranscript( response: NetworkArchive ) -> String:
-
-        return " ".join( i.text for i in lxml.etree.XML( response.response_content ) )
 
 
 class PDF( SimpleNamespace ):
