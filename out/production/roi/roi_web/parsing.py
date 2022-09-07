@@ -43,11 +43,9 @@ class EventParsing( SimpleNamespace ):
     def parse_url( line: TabSeparated ) -> Result[ UrlEvent[ UNorm ] ]:
         date, quality, url = line.strip().split( "\t" )
         parsed = urllib.parse.urlparse( url )
-
         # TODO  08/06/2022 Still a lot to do here. It seems to be tripping with very basic input , specially when scheme is not specific.
         good = UrlEvent( raw=url,
                          quality=quality,
-                         date=date,
                          hostname=parsed.hostname or "",
                          scheme=parsed.scheme or "http",
                          netloc=parsed.netloc,
@@ -134,13 +132,11 @@ class Youtube( SimpleNamespace ):
         return author
 
     @staticmethod
-    def structure( url: UrlEvent, content: String | NetworkArchive ) -> PageContent:
+    def structure( url: String, content: String | NetworkArchive ) -> PageContent:
         element = HTML.htmlElement( content )
         duration = Youtube.duration( element )
 
-        return PageContent( url=url.raw,
-                            visit_date=url.date,
-                            visit_kind=url.quality,
+        return PageContent( url=url,
                             text="",
                             title=Youtube.title( element ),
                             duration=duration,
@@ -213,7 +209,7 @@ class HTML( SimpleNamespace ):
         return HTML.first( ogImage, twitterImage, itemProp, headIcon, anyImage )
 
     @staticmethod
-    def structure( url: UrlEvent, content: String | NetworkArchive | bytes ) -> PageContent:
+    def structure( url: String, content: String | NetworkArchive | bytes ) -> PageContent:
         html_element = HTML.htmlElement( content )
 
         result = trafilatura.bare_extraction( filecontent=html_element,
@@ -235,9 +231,7 @@ class HTML( SimpleNamespace ):
         # TODO  24/06/2022 neighbors
         neighbors = re.findall( "(?<=]\()(.+?)(?=\))", text )
 
-        return PageContent( url=url.raw,
-                            visit_date=url.date,
-                            visit_kind=url.quality,
+        return PageContent( url=url,
                             text=text,
                             title=title,
                             author=author,
@@ -302,7 +296,7 @@ class PDF( SimpleNamespace ):
         return "\n\n".join( map( lambda x: x[ 4 ], page ) )
 
     @classmethod
-    def structure( cls, url: UrlEvent, content: bytes ) -> PageContent:
+    def structure( cls, url: String, content: bytes ) -> PageContent:
         doc = fitz.Document( stream=content )
 
         text = PDF.text( doc )
@@ -312,14 +306,13 @@ class PDF( SimpleNamespace ):
         subject = doc.metadata.get( "subject" )
         modDate = doc.metadata.get( "modDate" )
 
-        return PageContent( url=url.raw,
-                            visit_date=url.date,
-                            visit_kind=url.quality,
-                            text=text,
-                            title=title,
-                            duration=math.ceil( len( text ) / 5 / 250 ) * 60,
-                            author=author,
-                            date=modDate,
-                            tags=keywords,
-                            categories=[ subject ]
-                            )
+        return PageContent(
+            url=url,
+            text=text,
+            title=title,
+            duration=math.ceil( len( text ) / 5 / 250 ) * 60,
+            author=author,
+            date=modDate,
+            tags=keywords,
+            categories=[ subject ]
+        )

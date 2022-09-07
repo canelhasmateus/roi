@@ -38,12 +38,12 @@ class UrlKinds( enum.Enum ):
 class UrlEvent( Generic[ S ] ):
     raw: String
     quality: String
-    date: String
     scheme: String | None
     netloc: String | None
     path: String | None
     query: String | None
     hostname: String | None
+
     def update( self, kwargs ) -> UrlEvent[ S ]:
         return replace( self, **kwargs )
 
@@ -70,8 +70,6 @@ class UrlEvent( Generic[ S ] ):
 @dataclass()
 class PageContent:
     url: String
-    visit_date: String
-    visit_kind: String
     text: String
     title: String | None = None
     duration: Second | None = None
@@ -91,9 +89,6 @@ class PageContent:
 
     def json( self ) -> String:
         return json.dumps( asdict( self ), indent=2 )
-
-    def dict( self ) -> Mapping:
-        return asdict( self )
 
     @classmethod
     def from_json( cls, json_string: bytes ) -> PageContent:

@@ -18,6 +18,8 @@ PyMuPDF = "^1.20.1"
 aiologger = "^0.6.1"
 aiofile = "^3.7.4"
 Scrapy = "^2.6.2"
+networkx = "^2.8.6"
+matplotlib = "^3.5.3"
 
 [tool.poetry.dev-dependencies]
 

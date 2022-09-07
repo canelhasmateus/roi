@@ -94,9 +94,9 @@ class Processer:
     async def process( self, url: UrlEvent ) -> None:
         with ExecutionContext( "Processing url", exc_suppress=True,
                                extra={"digest": url.digest(), "kind": url.kind.value} ):
-            raw_archive = await self.fetch( url )
-            rich_content = await self.enrich( raw_archive )
-            await self.persist( rich_content )
+            rawArchive = await self.fetch( url )
+            richArchive = await self.enrich( rawArchive )
+            await self.persist( richArchive )
 
     # region raw
     async def fetch( self, url: UrlEvent ) -> WebArchive:
@@ -116,7 +116,7 @@ class Processer:
     # region rich
     async def enrich( self, archive: WebArchive ) -> PageContent:
 
-        url = archive.url
+        url = archive.url.raw
         content = archive.content.response_content
 
         with ExecutionContext( "Processing", exc_level="error", exc_suppress=False,
