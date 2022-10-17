@@ -77,21 +77,6 @@ class ArticlesSpider( scrapy.Spider ):
             case _:
                 print( response )
 
-
-# with ExecutionContext( "Youtube Transcript",
-#                        extra={"kind": archive.kind.value, "digest": archive.digest()} ):
-# 	content = await self.fetcher.fetch( "https://youtubetranscript.com",
-# 	                                    params={"server_vid": videoId.group( 0 )} )
-
-#
-# 	status = content.response_status
-# 	if 200 <= status <= 299:
-# 		return ResponseEnrichment( url=archive.url,
-# 		                           transcriptions=[ HTML.youtubeTranscript( content ) ] )
-# 	else:
-# 		raise Exception( "Bad response status " + str( status ) )
-
-
 process = CrawlerProcess()
 
 process.crawl( ArticlesSpider )

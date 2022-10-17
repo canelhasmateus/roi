@@ -82,9 +82,8 @@ def main():
         json.dump( sidebar, f, indent=2 )
 
     process = subprocess.run( rf"cd {akti_path} && npm run build", shell=True )
-    with open( akti_path / r"dist/index.html", "rb" ) as dist:
+    with open( akti_path / r"dist\index.html", "rb" ) as dist:
         upload_file( dist, akti_bucket, "index.html" )
-
         create_invalidation( akti_distribution )
 
 

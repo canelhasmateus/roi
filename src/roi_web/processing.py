@@ -1,5 +1,4 @@
 import asyncio
-import json
 import os
 import pathlib
 import re
@@ -28,14 +27,23 @@ def load_events( filepath: pathlib.Path = None, seen=None ) -> Iterable[ UrlEven
                     if event.raw not in seen:
                         yield event
 
-def load_processed( ) -> Iterable[ PageContent]:
+
+def remove_file( content: PageContent ):
+    file = pathlib.Path( Processer.DEFAULT_PATH ) / content.digest()
+    file.unlink()
+
+
+def load_processed() -> Iterable[ PageContent ]:
     for f in Processer.DEFAULT_PATH.glob( "*" ):
-        with open( f, "rb" ) as file:
-            try:
+        try:
+            with open( f, "rb" ) as file:
                 payload = file.read()
-                yield PageContent.from_json( payload )
-            except Exception as e:
-                print( e )
+                content =  PageContent.from_json( payload )
+        except Exception as e:
+            print( e )
+            continue
+
+        yield content
 
 
 class Fetcher:
@@ -43,7 +51,7 @@ class Fetcher:
 
     def __init__( self, session: ClientSession = None ):
         if not session:
-            tcp_connector = aiohttp.TCPConnector( verify_ssl=False, limit_per_host=2, limit=50 )
+            tcp_connector = aiohttp.TCPConnector( verify_ssl=False, limit_per_host=2, limit=10 )
             timeout = ClientTimeout( total=300 )
             session = aiohttp.ClientSession( connector=tcp_connector, timeout=timeout )
 
@@ -74,16 +82,17 @@ class Fetcher:
 
 
 class Processer:
-    basepath: ClassVar = "C:/Users/Mateus/Desktop/files"
-    DEFAULT_RAW_PATH: ClassVar = pathlib.Path( basepath ) / "raw"
+    basepath: ClassVar = os.environ.get( "ROI_BASEDIR" )
+
     DEFAULT_PATH: ClassVar = pathlib.Path( basepath ) / "processed"
-    DEFAULT_RICH_PATH: ClassVar = pathlib.Path( basepath ) / "enriched"
+
     youtube_pattern: ClassVar = re.compile( r"(?<=v=)(\w+?)(?=\b|&)" )
 
-    def __init__( self, fetcher: Fetcher ):
+    def __init__( self, fetcher: Fetcher, connection="" ):
 
         self.semaphore = asyncio.Semaphore( 1000 )
         self.fetcher = fetcher
+        # self.connection = sqlite3.connect( connection )
 
     async def __aenter__( self ):
         return self
@@ -92,11 +101,17 @@ class Processer:
         await self.fetcher.__aexit__( exc_type, exc_val, exc_tb )
 
     async def process( self, url: UrlEvent ) -> None:
+
         with ExecutionContext( "Processing url", exc_suppress=True,
                                extra={"digest": url.digest(), "kind": url.kind.value} ):
+
             raw_archive = await self.fetch( url )
             rich_content = await self.enrich( raw_archive )
+            if not rich_content.text:
+                raise Exception("No text")
+
             await self.persist( rich_content )
+
 
     # region raw
     async def fetch( self, url: UrlEvent ) -> WebArchive:
@@ -133,7 +148,7 @@ class Processer:
                     try:
                         return HTML.structure( url, content )
                     except Exception as e:
-                       print( e )
+                        print( e )
 
                 case "application/pdf", _:
                     return PDF.structure( url, content )
