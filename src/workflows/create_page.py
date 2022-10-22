@@ -6,6 +6,7 @@ import subprocess
 import time
 import urllib
 import urllib.parse
+from typing import Iterable, Dict, List
 
 import boto3 as boto3
 
@@ -13,78 +14,100 @@ from roi_web import PageContent
 from roi_web.processing import load_processed
 
 
-def create_invalidation( distribution_id ):
-    cf = boto3.client( 'cloudfront' )
+def append( l , v ):
+    l.append( v )
+    return l
+def write_to( path ):
+    return open( path ,  "w")
+
+def read_from( path ):
+    return open( path, "rb")
+
+def dump_json( f, content : List[ Dict ]):
+    if not content:
+        raise Exception(f"Writing to { f.name }, but content was empty. ")
+
+    json.dump( content, f, indent=2 )
+    print(f"Wrote { len(content) } content entries to { f.name }.")
+
+
+def partition_by( itr, key_fn, value_fn = lambda x : x ):
+    res = {}
+    for el in itr:
+        key        = key_fn( el )
+        value      = value_fn( el )
+        partition  = res.get( key, [ ] )
+        res[ key ] = append( partition, value )
+
+    return res
+def content_key( content: PageContent):
+    return content.visit_kind
+def content_dict( content: PageContent ):
+    hostname = urllib.parse.urlparse( content.url ).hostname,
+
+    return {
+        "url"       : content.url,
+        "visit_date": content.visit_date,
+        "visit_kind": content.visit_kind,
+        "title"     : content.title,
+        "duration"  : content.duration,
+        "date"      : content.date,
+        "image"     : content.image,
+        "domain"    : hostname,
+        "author"    : content.author or hostname or content.url
+    }
+
+
+def invalidate( distribution_id ):
     reference = str( time.time() ).replace( ".", "" )
-    res = cf.create_invalidation(
-        DistributionId=distribution_id,
-        InvalidationBatch={
-            'Paths': {
-                'Quantity': 1,
-                'Items': [
-                    '/*'
-                ]
-            },
-            'CallerReference': reference
-        }
-    )
-    invalidation_id = res[ 'Invalidation' ][ 'Id' ]
-    print( f"invalidationId = {invalidation_id}" )
+
+    cf  = boto3.client( 'cloudfront' )
+    res = cf.create_invalidation( DistributionId=distribution_id,
+                                  InvalidationBatch={
+                                      'CallerReference': reference,
+                                      'Paths': {
+                                          'Quantity': 1,
+                                          'Items': [ '/*' ]
+                                      }
+                                  })
+
+    return res[ 'Invalidation' ][ 'Id' ]
 
 
 def upload_file( file, bucket, object_name ):
-    # Upload the file
+    print("Uploading site HTML to S3.")
+
     s3_client = boto3.client( 's3' )
-    response = s3_client.upload_fileobj( file, bucket, object_name,
-                                         ExtraArgs={
-                                             'ContentType': 'text/html'
-                                         } )
-
-
-def asdict( content: PageContent ):
-    dic = content.dict()
-    hostname = urllib.parse.urlparse( content.url ).hostname
-    author = content.author or hostname or content.url
-
-    dic[ "domain" ] = hostname
-    dic[ "author" ] = author
-    del dic[ "text" ]
-    del dic[ "tags" ]
-    del dic[ "categories" ]
-    del dic[ "comments" ]
-    del dic[ "neighbors" ]
-
-    return dic
+    return s3_client.upload_fileobj( file,
+                                     bucket,
+                                     object_name,
+                                     ExtraArgs={'ContentType': 'text/html'} )
 
 
 def main():
-    queue = [ ]
-    tool = [ ]
-    for el in load_processed():
-        d = asdict( el )
-        match el.visit_kind:
-            case "Tool":
-                tool.append( d )
-            case "Queue":
-                queue.append( d )
+    partitions = partition_by( load_processed(), content_key, content_dict )
+    to_read    = random.choices( partitions[ "Queue" ], k=50 )
+    to_use     = random.choices( partitions[ "Tool" ], k=20 )
 
-    previews = random.choices( queue, k=50 )
-    sidebar = random.choices( tool, k=20 )
+    akti_path  = pathlib.Path( os.environ[ "AKTI_PATH" ] )
+    assets     = akti_path / "src/assets"
 
-    akti_distribution = os.environ[ "AKTI_DISTRIBUTION" ]
-    akti_bucket = os.environ[ "AKTI_BUCKET" ]
-    akti_path = pathlib.Path( os.environ[ "AKTI_PATH" ] )
+    with write_to( assets  / "tool.json" ) as tools:
+        dump_json( tools, to_use )
 
-    with open( akti_path / "src/assets/queue.json", "w" ) as f:
-        json.dump( previews, f, indent=2 )
+    with write_to( assets  / "queue.json" ) as previews:
+        dump_json( previews, to_read )
 
-    with open( akti_path / "src/assets/tool.json", "w" ) as f:
-        json.dump( sidebar, f, indent=2 )
+    subprocess.run( rf"cd {akti_path} && npm run build", shell=True )
+    with read_from( akti_path / "dist/index.html" ) as dist:
 
-    process = subprocess.run( rf"cd {akti_path} && npm run build", shell=True )
-    with open( akti_path / r"dist\index.html", "rb" ) as dist:
+        akti_distribution = os.environ[ "AKTI_DISTRIBUTION" ]
+        akti_bucket       = os.environ[ "AKTI_BUCKET" ]
+        invalidation_id   = invalidate( akti_distribution )
+
         upload_file( dist, akti_bucket, "index.html" )
-        create_invalidation( akti_distribution )
+        print( f"invalidationId = { invalidation_id }" )
+
 
 
 if __name__ == "__main__":

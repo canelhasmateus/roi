@@ -69,6 +69,7 @@ class UrlEvent( Generic[ S ] ):
 
 @dataclass()
 class PageContent:
+
     url: String
     visit_date: String
     visit_kind: String
